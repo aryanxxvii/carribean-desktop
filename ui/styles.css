@@ -248,8 +248,9 @@ button.glass {
   .select select, .select select::picker(select) { appearance: base-select; }
   .select select::picker-icon { display: none; }
   .select select::picker(select) {
-    margin-block: 7px; max-height: min(290px, 60dvh); padding: 7px;
-    gap: 6px; border: 0; border-radius: 14px;
+    margin-block: 7px; max-height: min(290px, 60dvh); padding: 4px;
+    flex-direction: column; gap: 1px; border: 0; border-radius: 12px;
+    overflow-y: auto; scrollbar-width: none;
     background: #202020;
     box-shadow: 0 12px 34px #000a, inset 0 1px #ffffff10;
     opacity: 0; scale: .97 .93; translate: 0 -4px;
@@ -258,7 +259,7 @@ button.glass {
       display .26s allow-discrete, overlay .26s allow-discrete;
   }
   .select select:open::picker(select) {
-    display: flex; flex-direction: column; opacity: 1; scale: 1; translate: 0 0;
+    display: flex; opacity: 1; scale: 1; translate: 0 0;
   }
   @starting-style {
     .select select:open::picker(select) { opacity: 0; scale: .97 .93; translate: 0 -4px; }
@@ -267,10 +268,10 @@ button.glass {
   .select > svg:last-child { transition: rotate .27s var(--flow); }
   .select:has(select:open) > svg:last-child { rotate: 180deg; }
   .select select option {
-    --glass-fill: .028;
+    --glass-fill: 0;
     --option-shine: 0;
-    flex: none; padding: 7px 9px; min-height: 30px; gap: 8px;
-    border-radius: 9px; cursor: pointer;
+    flex: none; padding: 4px 8px; min-height: 24px; gap: 6px;
+    border-radius: 7px; cursor: pointer;
     background:
       linear-gradient(90deg, transparent, rgb(255 255 255 / var(--option-shine)) 42%, transparent) 8px 1px / 29px 1px no-repeat,
       rgb(255 255 255 / var(--glass-fill));
