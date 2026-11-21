@@ -45,10 +45,13 @@ export function IconButton({ icon: Icon, label, className = '', children, ...pro
 }
 
 const preparedArtwork = new Map();
+const artworkCors = (url) => /^https:\/\/image\.tmdb\.org\//i.test(url) ? 'anonymous' : undefined;
 
 async function decodeArtwork(url) {
   if (!url) return '';
   const image = new Image();
+  const cors = artworkCors(url);
+  if (cors) image.crossOrigin = cors;
   image.src = url;
   let timer;
   try {
@@ -97,7 +100,8 @@ export function Spotlight({ film: selected, movies, onMove, onSet, onDetails, on
   return <section className="spotlight" data-art-source aria-label="Featured film" aria-busy={pending}>
     <div className="spotlight-images" aria-hidden="true">
       <div key={film.id} className={'spotlight-art' + (slide.artwork.portrait ? ' portrait-art' : '')} data-current="true">
-        {slide.artwork.src && <img className="spotlight-image" src={slide.artwork.src} alt="" data-glass-art />}
+        {slide.artwork.src && <img className="spotlight-image" crossOrigin={artworkCors(slide.artwork.src)}
+          src={slide.artwork.src} alt="" data-glass-art />}
       </div>
     </div>
     <div className="spotlight-shade" />
