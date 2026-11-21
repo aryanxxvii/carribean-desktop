@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import { Check, Film, Plus, Search, X } from 'lucide-react';
+import { Check, Film, Search, X } from 'lucide-react';
 import { call } from './api';
-import { Modal, moviePoster } from './components';
-import { findFilms, sameFilm } from './library';
+import { moviePoster } from './components';
+import { sameFilm } from './library';
 
 export function useLookup(initial = '') {
   const [query, setQuery] = useState(initial);
@@ -37,54 +37,39 @@ export function useLookup(initial = '') {
   return { query, remote, working, error, change, submit };
 }
 
-export function LookupInput({ lookup, autoFocus = false, inputRef, placeholder = 'Search films', buttonText = 'Search' }) {
+export function LookupInput({ lookup }) {
   return <form className="lookup-form" role="search" onSubmit={(event) => { event.preventDefault(); lookup.submit(); }}>
     <div className="top-search glass">
       <Search size={17} />
-      <input ref={inputRef} aria-label="Search films" autoFocus={autoFocus} placeholder={placeholder} value={lookup.query} onChange={(event) => lookup.change(event.target.value)} />
+      <input aria-label="Search film metadata" placeholder="Search film metadata" value={lookup.query} onChange={(event) => lookup.change(event.target.value)} />
       {lookup.query && <button type="button" aria-label="Clear search" onClick={() => lookup.change('')}><X size={15} /></button>}
     </div>
     <button type="submit" className="button glass secondary" disabled={lookup.query.trim().length < 2 || lookup.working}>
-      {lookup.working ? 'Searching…' : buttonText}
+      {lookup.working ? 'Searching…' : 'Search'}
     </button>
   </form>;
 }
 
-function Result({ film, onPick, selected, action }) {
+function Result({ film, onPick }) {
   const poster = moviePoster(film);
   return <li className="lookup-result" data-art-source>
-    <span className="lookup-poster">{poster ? <img src={poster} alt="" loading="lazy" data-glass-art /> : <Film size={19} />}</span>
+    <span className="lookup-poster"><Film size={19} />{poster && <img key={poster} src={poster} alt="" loading="lazy" data-glass-art
+      onError={(event) => { event.currentTarget.hidden = true; }} />}</span>
     <div><strong>{film.title}</strong><small>{[film.year, film.director || film.origin, film.onDisk ? 'On disk' : '', film.runtime ? film.runtime + ' min' : ''].filter(Boolean).join(' · ')}</small></div>
-    <button type="button" className={'glass icon-button result-action' + (selected ? ' chosen' : '')}
-      aria-pressed={action === 'Add' ? selected : undefined}
-      aria-label={(selected ? 'Remove ' : action + ' ') + film.title}
-      title={selected ? 'Remove from watchlist' : action} onClick={() => onPick(film, selected)}>
-      {selected || action === 'Use' ? <Check size={16} /> : <Plus size={16} />}
+    <button type="button" className="glass icon-button result-action"
+      aria-label={'Use metadata for ' + film.title} title="Use metadata" onClick={() => onPick(film)}>
+      <Check size={16} />
     </button>
   </li>;
 }
 
-export function LookupResults({ lookup, movies, onPick, isSelected = () => false, action = 'Add' }) {
-  const local = findFilms(movies, lookup.query).slice(0, 12);
-  const online = (lookup.remote || []).filter((film) => !local.some((entry) => sameFilm(film, entry)));
-  const groups = [['In Carribean', local], ['Online', online]];
+export function LookupResults({ lookup, film, onPick }) {
+  const online = [...(lookup.remote || [])].sort((a, b) => Number(sameFilm(b, film)) - Number(sameFilm(a, film)));
   return <div className="lookup-results" aria-live="polite">
-    {groups.map(([title, list]) => !!list.length && <section key={title} className="lookup-group">
-      <h3>{title}</h3>
-      <ul>{list.map((film) => <Result key={film.id} film={film} onPick={onPick} selected={isSelected(film)} action={action} />)}</ul>
-    </section>)}
+    {!!online.length && <section className="lookup-group" aria-label="Metadata matches">
+      <ul>{online.map((entry) => <Result key={entry.imdb || entry.id} film={entry} onPick={onPick} />)}</ul>
+    </section>}
     {lookup.error && <p className="form-error" role="alert">{lookup.error}</p>}
-    {lookup.remote && !local.length && !online.length && <p className="lookup-status">No films found.</p>}
+    {lookup.remote && !online.length && <p className="lookup-status">No films found.</p>}
   </div>;
-}
-
-export function FindFilms({ list, movies, savedMovies, onToggle, onManual, onClose }) {
-  const lookup = useLookup();
-  return <Modal title="Find films" onClose={onClose} className="lookup-dialog">
-    <h2>Find films</h2>
-    <p className="modal-subtitle">{list.name}</p>
-    <LookupInput lookup={lookup} autoFocus />
-    <LookupResults lookup={lookup} movies={movies} onPick={onToggle} isSelected={(film) => savedMovies.some((entry) => sameFilm(entry, film))} />
-    <button type="button" className="text-action" onClick={onManual}><Plus size={15} />Add by title</button>
-  </Modal>;
 }

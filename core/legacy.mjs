@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { readJson, put } from './storage.mjs';
 import { parseFilename, filmId } from './scanner.mjs';
 import { cleanFilm, withMetadata } from './metadata.mjs';
@@ -69,5 +68,3 @@ export async function importLegacy(store, source, { automatic = false } = {}) {
   }
   return imported;
 }
-
-export const newListId = () => 'list-' + randomUUID();

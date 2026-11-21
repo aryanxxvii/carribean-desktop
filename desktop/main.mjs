@@ -7,10 +7,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const entry = path.join(here, '..', 'dist', 'index.html');
 let window;
 let service;
+app.setPath('userData', path.join(app.getPath('appData'), 'Carribean'));
 
 function showWindow() {
   window = new BrowserWindow({
-    title: 'Carribean', backgroundColor: '#0c0c0c', width: 1500, height: 980, icon: path.join(here, '..', 'dist', 'icon.png'),
+    title: 'Caribbean', backgroundColor: '#0c0c0c', width: 1500, height: 980, icon: path.join(here, '..', 'dist', 'icon.png'),
     minWidth: 720, minHeight: 640, show: false,
     titleBarStyle: 'hidden', titleBarOverlay: { color: '#0c0c0c', symbolColor: '#f1f1f1', height: 44 },
     webPreferences: { preload: path.join(here, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true }
@@ -43,7 +44,7 @@ else {
       },
       pickFolder: async (kind) => {
         const selected = await dialog.showOpenDialog(window, {
-          title: kind === 'legacy' ? 'Select the old Carribean library' : 'Select your movie folder',
+          title: kind === 'legacy' ? 'Select the original Caribbean library' : 'Select your movie folder',
           properties: ['openDirectory']
         });
         return selected.filePaths[0] || '';
@@ -51,7 +52,7 @@ else {
     });
     const initial = service.start();
     ipcMain.handle('carribean:library', async (event, action, payload) => {
-      if (event.senderFrame?.url !== pathToFileURL(entry).href) return { error: 'Invalid Carribean window.' };
+      if (event.senderFrame?.url !== pathToFileURL(entry).href) return { error: 'Invalid Caribbean window.' };
       try {
         await initial;
         return { value: await service.action(action, payload) };

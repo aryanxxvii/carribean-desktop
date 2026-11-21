@@ -2,21 +2,22 @@ export const genreNames = (film) => (film.genre || '').split(',').map((genre) =>
 export const defaultFilters = { genre: '', min: 0, max: 600, status: 'all', sort: '', descending: false, group: '', groupOrder: 'name' };
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 const titles = (a, b) => collator.compare(a.title, b.title);
-const featuredPosters = ['tt15239678', 'tt1856101', 'tt0156887', 'tt13238346', 'tt6751668', 'tt2543164',
-  'tt19770238', 'tt0468569', 'tt0482571', 'tt5013056', 'tt0079944'];
 export const activeFilters = (filters) => Object.keys(defaultFilters).some((key) => filters[key] !== defaultFilters[key]);
 export const searchKey = (value) => String(value || '').toLowerCase().normalize('NFKD').replace(/\p{Mark}/gu, '');
 export const sameFilm = (left, right) => left.id === right.id || (left.imdb && right.imdb && left.imdb === right.imdb)
   || (left.year === right.year && searchKey(left.title) === searchKey(right.title));
 
 export function findFilms(films, query) {
-  const tokens = searchKey(query).trim().split(/\s+/).filter(Boolean);
+  const words = (value) => searchKey(value).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const term = words(query);
+  const tokens = term.split(' ').filter(Boolean);
   if (!tokens.length) return [];
   return films.map((film) => {
-    const title = searchKey(film.title);
-    const fields = searchKey([film.title, film.director, film.cast, film.year, film.genre, film.origin, film.description].filter(Boolean).join(' '));
-    const matched = tokens.every((token) => fields.includes(token));
-    const rank = title === searchKey(query.trim()) ? 0 : tokens.every((token) => title.includes(token)) ? 1 : 2;
+    const title = words(film.title);
+    const fields = words([film.title, film.year, film.director, film.cast, film.genre, film.origin].filter(Boolean).join(' ')).split(' ');
+    const matched = tokens.every((token) => fields.some((word) => word.startsWith(token)));
+    const rank = title === term || `${title} ${film.year}` === term ? 0 : title.startsWith(term) ? 1
+      : tokens.every((token) => title.includes(token)) ? 2 : 3;
     return { matched, rank, film };
   }).filter((item) => item.matched).sort((a, b) => a.rank - b.rank || titles(a.film, b.film)).map((item) => item.film);
 }
@@ -29,10 +30,6 @@ export function genresIn(films) {
 
 export function filterLibrary(catalogue, filters) {
   const filteringRuntime = filters.min > 0 || filters.max < 600;
-  const posterRank = (film) => {
-    const index = featuredPosters.indexOf(film.imdb);
-    return index < 0 ? featuredPosters.length : index;
-  };
   const people = (value) => value || '\uffff';
   const by = {
     title: titles,
@@ -45,7 +42,7 @@ export function filterLibrary(catalogue, filters) {
     && (!filteringRuntime || (film.runtime && film.runtime >= filters.min && film.runtime <= filters.max))
     && (filters.status === 'all' || film.watched === (filters.status === 'watched')))
     .sort((a, b) => {
-      const comparison = by[filters.sort]?.(a, b) ?? (Number(b.onDisk) - Number(a.onDisk) || posterRank(a) - posterRank(b));
+      const comparison = by[filters.sort]?.(a, b) ?? (Number(b.onDisk) - Number(a.onDisk));
       return comparison * (filters.descending ? -1 : 1) || titles(a, b);
     });
 }
@@ -57,6 +54,7 @@ export function groupLibrary(films, filters) {
     const from = Math.floor(film.runtime / 30) * 30;
     const names = filters.group === 'director' ? [film.director || 'Unknown director']
       : filters.group === 'runtime' ? [from ? from + '–' + (from + 29) + ' min' : film.runtime ? 'Under 30 min' : 'Unknown runtime']
+        : filters.group === 'decade' ? [decadeOf(film) ? decadeOf(film) + 's' : 'Unknown year']
         : genreNames(film);
     for (const name of names.length ? names : ['Uncategorized']) {
       if (!groups.has(name)) groups.set(name, []);
@@ -66,15 +64,88 @@ export function groupLibrary(films, filters) {
   return [...groups].sort((a, b) => (filters.groupOrder === 'count' ? b[1].length - a[1].length : 0) || collator.compare(a[0], b[0]));
 }
 
-export function shelvesFor(films, genres) {
-  const byRating = [...films].filter((film) => film.rating).sort((a, b) => b.rating - a.rating || titles(a, b));
-  const shelves = [
-    ['Unwatched Picks', films.filter((film) => !film.watched)],
-    ['Top Rated', byRating],
-    ['Short and Tight', films.filter((film) => film.runtime > 0 && film.runtime <= 100)],
-    ['Rewatch', films.filter((film) => film.watched)],
-    ['Long Sessions', films.filter((film) => film.runtime >= 140)],
-    ...genres.slice(0, 3).map((genre) => [genre, films.filter((film) => genreNames(film).includes(genre))])
-  ];
-  return shelves.filter(([, items]) => items.length);
+const decadeOf = (film) => Math.floor(Number(film.year || 0) / 10) * 10;
+
+function variation(key, seed) {
+  let hash = 2166136261 ^ seed;
+  for (const character of key) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
+  return ((hash ^ (hash >>> 13)) >>> 0) / 4294967296;
+}
+
+export function programLibrary(films, { seed, recent, hasPoster, hasStill }) {
+  const watched = films.filter((film) => film.watched);
+  const unwatched = films.filter((film) => !film.watched);
+  const genres = new Map(films.map((film) => [film.id, genreNames(film)]));
+  const taste = new Map();
+  for (const film of watched) {
+    for (const genre of genres.get(film.id)) taste.set(genre, (taste.get(genre) || 0) + 1);
+  }
+  const score = (film, key) => {
+    const tags = genres.get(film.id);
+    const affinity = tags.reduce((total, genre) => total + (taste.get(genre) || 0), 0) / (Math.max(1, tags.length) * Math.max(1, watched.length));
+    return (film.rating || 6) * .42 + affinity * 1.7 + variation(key + film.id, seed) * 2.8;
+  };
+  const ranked = (items, key) => [...items].sort((a, b) => score(b, key) - score(a, key) || titles(a, b));
+  const candidates = films;
+  const featured = [];
+  const knownGenres = new Set();
+  const knownEras = new Set();
+  const unseen = candidates.filter((film) => !recent.includes(film.id));
+  const alternatives = unseen.length ? unseen : candidates.filter((film) => film.id !== recent[0]);
+  const ready = alternatives.filter(hasStill);
+  const leadPool = ready.length ? ready : alternatives;
+  while (featured.length < Math.min(5, candidates.length)) {
+    const available = (featured.length || !leadPool.length ? candidates : leadPool).filter((film) => !featured.includes(film));
+    const featureScore = (film) => score(film, 'spotlight') + Number(!film.watched) * .8 + Number(hasStill(film) || !!hasPoster(film)) * .45
+      + Number(!knownGenres.has(genres.get(film.id)[0])) * .9 + Number(!knownEras.has(decadeOf(film))) * .65
+      - Number(recent.includes(film.id)) * 1.2;
+    const next = available.sort((a, b) => featureScore(b) - featureScore(a) || titles(a, b))[0];
+    featured.push(next);
+    knownGenres.add(genres.get(next.id)[0]);
+    knownEras.add(decadeOf(next));
+  }
+
+  const shelves = [];
+  const shown = new Set(featured.map((film) => film.id));
+  function add(name, reason, items, strict = false) {
+    if (!items.length) return;
+    const ordered = strict ? items : ranked(items, name);
+    const arranged = strict ? ordered : [...ordered.filter((film) => !shown.has(film.id)), ...ordered.filter((film) => shown.has(film.id))];
+    arranged.slice(0, 7).forEach((film) => shown.add(film.id));
+    shelves.push({ name, reason, movies: arranged });
+  }
+  function rotate(groups, key) {
+    return groups.filter(([, movies]) => movies.length >= 4)
+      .sort(([a], [b]) => variation(key + b, seed) - variation(key + a, seed))[0];
+  }
+  const genre = rotate(genresIn(films).map((item) => [item, films.filter((film) => genres.get(film.id).includes(item))]), 'genre');
+  const decades = [...new Set(films.map(decadeOf).filter(Boolean))];
+  const decade = rotate(decades.map((year) => [`From the ${year}s`, films.filter((film) => decadeOf(film) === year)]), 'decade');
+  const director = rotate([...new Set(films.map((film) => film.director).filter(Boolean))].map((name) =>
+    [name, films.filter((film) => film.director === name)]), 'director');
+
+  const related = (reference) => {
+    const tags = genres.get(reference.id);
+    return unwatched.filter((film) => {
+      if (reference.director && film.director === reference.director) return true;
+      const candidateTags = genres.get(film.id);
+      if (tags.includes('Animation') !== candidateTags.includes('Animation')) return false;
+      const shared = candidateTags.filter((genre) => tags.includes(genre));
+      return shared.length >= 2 && shared.length * 2 >= Math.max(tags.length, candidateTags.length);
+    });
+  };
+  const match = rotate(ranked(watched, 'reference').slice(0, 24).map((film) => [film.title, related(film)]), 'related');
+  add('Unwatched Picks', '', unwatched);
+  if (match) add(`Because you watched ${match[0]}`, '', match[1]);
+  if (genre) add(genre[0], 'Genre spotlight', genre[1]);
+  add('Top Rated', 'Highest IMDb ratings in your library', [...films].filter((film) => film.rating)
+    .sort((a, b) => b.rating - a.rating || score(b, 'rating') - score(a, 'rating')), true);
+  if (seed % 2 && director) add(`Directed by ${director[0]}`, 'In your library', director[1]);
+  else if (decade) add(decade[0], 'Decade spotlight', decade[1]);
+  add('Under 100 Minutes', 'A shorter watch', films.filter((film) => film.runtime > 0 && film.runtime < 100));
+  add('Rewatch', 'Films you’ve already marked watched', watched);
+  add('Long Sessions', 'Runs for 140 minutes or more', films.filter((film) => film.runtime >= 140));
+
+  return { featured, shelves };
 }

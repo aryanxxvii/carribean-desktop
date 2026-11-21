@@ -15,7 +15,7 @@ function localLibrary() {
         const port = request.socket.localPort;
         if (request.method !== 'POST' || !['127.0.0.1:' + port, 'localhost:' + port].includes(host)
             || origin !== 'http://' + host || request.headers['x-carribean'] !== 'local') {
-          response.writeHead(403).end(JSON.stringify({ error: 'Open Carribean from its localhost preview.' }));
+          response.writeHead(403).end(JSON.stringify({ error: 'Open Caribbean from its localhost preview.' }));
           return;
         }
         try {

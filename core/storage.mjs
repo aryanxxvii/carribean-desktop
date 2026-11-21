@@ -53,6 +53,8 @@ export function put(group, id, value) {
 export function createStorage(root = dataDirectory) {
   const libraryFile = path.join(root, 'library.json');
   const settingsFile = path.join(root, 'device.json');
+  const mediaFile = path.join(root, 'media.json');
+  const artworkFile = path.join(root, 'backdrops.json');
   const ready = mkdir(root, { recursive: true });
   async function locked(target, task, immediate = false) {
     await ready;
@@ -69,6 +71,14 @@ export function createStorage(root = dataDirectory) {
   };
   return {
     root, library, settings, ready,
+    media: () => readJson(mediaFile, {}),
+    updateMedia: (entries) => locked('media-gate', async () => {
+      await writeJson(mediaFile, { ...await readJson(mediaFile, {}), ...entries });
+    }),
+    backdrops: () => readJson(artworkFile, {}),
+    updateBackdrops: (entries) => locked('backdrop-gate', async () => {
+      await writeJson(artworkFile, { ...await readJson(artworkFile, {}), ...entries });
+    }),
     edit: (edit) => locked('library-gate', async () => {
       const current = await library();
       const updated = await edit(current) || current;

@@ -1,34 +1,23 @@
 import { readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createStorage, mergeLibrary, put } from './storage.mjs';
-import { filmId, scanDirectory } from './scanner.mjs';
+import { scanDirectory } from './scanner.mjs';
 import { cleanFilm, createOmdb, withMetadata } from './metadata.mjs';
 import { parseSnapshot, signIn, syncGit, validateGit } from './git.mjs';
-import { importLegacy, newListId } from './legacy.mjs';
+import { importLegacy } from './legacy.mjs';
 import { searchWikidata } from './film-search.mjs';
+import { createMediaReader } from './media-info.mjs';
+import { cachedBackdrop, refreshBackdrops } from './backdrops.mjs';
 
-const nameOf = (name) => String(name || '').trim().slice(0, 80);
 const validImdb = (value) => /^tt\d{5,16}$/.test(value || '');
 const omdbKeys = (settings) => settings.omdb || process.env.OMDB_API_KEYS || '';
 const videoId = (value) => /^film-[a-f\d]{24}$/.test(value || '');
+const missingMetadata = (film) => !film?.poster || !film.description || !film.imdb;
 const relativeTo = (base, target) => {
   const relative = path.relative(base, target);
   return relative && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 };
-
-function changeMembership(state, { id, list, film, value }) {
-  if (!state.lists[list]?.value) throw new Error('Choose an existing watchlist.');
-  const fresh = cleanFilm(film);
-  const match = fresh.imdb && Object.keys(state.films).find((key) => state.films[key].value.imdb === fresh.imdb);
-  const key = match || (videoId(id) && state.films[id] ? id : filmId(fresh.title, fresh.year));
-  if (!state.films[key]) {
-    if (!fresh.title) throw new Error('Enter a film title.');
-    put(state.films, key, fresh);
-  }
-  put(state.entries, list + ':' + key, value === true);
-}
 
 export function openMovieFile(file) {
   return new Promise((resolve, reject) => {
@@ -45,29 +34,67 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
   let activity = '';
   let errorMessage = '';
   let watcher;
+  let scanSummary = null;
   const searches = new Map();
+  const mediaReader = createMediaReader(store);
+  let mediaRefresh;
+
+  async function localMovie(id, settings, root) {
+    if (!videoId(id)) return null;
+    settings ||= await store.settings();
+    if (!settings.moviePath || !settings.files[id]?.length) return null;
+    root ??= await realpath(settings.moviePath).catch(() => '');
+    if (!root) return null;
+    for (const file of settings.files[id]) {
+      const absolute = await realpath(file).catch(() => '');
+      if (!absolute || !relativeTo(root, absolute)) continue;
+      const info = await stat(absolute).catch(() => null);
+      if (info?.isFile()) return { absolute, info };
+    }
+    return null;
+  }
+
+  async function searchOnline(query, keys) {
+    if (!keys) return searchWikidata(query);
+    const omdb = await createOmdb(keys).search(query).catch(() => []);
+    if (!omdb.length) return searchWikidata(query);
+    if (omdb.every((film) => film.poster)) return omdb;
+    const wikipedia = await searchWikidata(query).catch(() => []);
+    return omdb.map((film) => ({ ...film, poster: film.poster || wikipedia.find((entry) => entry.imdb === film.imdb)?.poster || '' }));
+  }
+
   const service = {
+    refreshMedia() {
+      if (!mediaRefresh) mediaRefresh = (async () => {
+        const settings = await store.settings();
+        if (!settings.moviePath || !Object.keys(settings.files).length) return;
+        const root = await realpath(settings.moviePath).catch(() => '');
+        if (root) await mediaReader.refresh(Object.keys(settings.files), (id) => localMovie(id, settings, root));
+      })().finally(() => { mediaRefresh = null; });
+      return mediaRefresh;
+    },
     async snapshot() {
-      const [library, settings] = await Promise.all([store.library(), store.settings()]);
+      const [library, settings, media, backdrops] = await Promise.all([store.library(), store.settings(), store.media(), store.backdrops()]);
       return {
         films: Object.entries(library.films).map(([id, record]) => ({
-          ...record.value, id, watched: library.watched[id]?.value === true, onDisk: !!settings.files[id]?.length
-        })),
-        lists: Object.entries(library.lists).filter(([, record]) => record.value).map(([id, record]) => ({
-          id, ...record.value,
-          filmIds: Object.keys(library.entries).filter((key) => key.startsWith(id + ':') && library.entries[key].value)
-            .map((key) => key.split(':')[1])
+          ...record.value, id, watched: library.watched[id]?.value === true, onDisk: !!settings.files[id]?.length,
+          backdrop: cachedBackdrop({ ...record.value, id }, backdrops) || undefined,
+          file: settings.files[id]?.includes(media[id]?.source) ? {
+            size: media[id].size, resolution: media[id].resolution, formats: media[id].formats,
+            aspect: media[id].aspect, edition: media[id].edition,
+            audioFormats: [...new Set((media[id].audio || []).map((track) => track.format).filter(Boolean))]
+          } : undefined
         })),
         device: {
           moviePath: settings.moviePath, connected: settings.connected === true, skipped: settings.skipped || 0,
           lastSync: settings.lastSync || '', git: settings.git, hasOmdb: !!omdbKeys(settings), canBrowse: !!pickFolder
         },
-        activity, error: errorMessage
+        activity, error: errorMessage, scanSummary
       };
     },
     async scan({ enrich = false } = {}) {
-      if (scanning) return scanning.then(() => enrich ? service.scan({ enrich }) : undefined);
-      scanning = store.lockScan(async () => {
+      if (scanning) return scanning.enrich || !enrich ? scanning.promise : scanning.promise.then(() => service.scan({ enrich }));
+      const promise = store.lockScan(async () => {
         const settings = await store.settings();
         if (!settings.moviePath) return;
         let result;
@@ -99,7 +126,8 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
               : { rev: '0000000000000-00000000-0000-4000-8000-000000000000', value: film };
           }
         });
-        if (JSON.stringify(files) !== JSON.stringify(settings.files) || !settings.connected || settings.skipped !== result.skipped) {
+        const filesChanged = JSON.stringify(files) !== JSON.stringify(settings.files);
+        if (filesChanged || !settings.connected || settings.skipped !== result.skipped) {
           await store.configure((current) => {
             if (current.moviePath === settings.moviePath) {
               current.files = files;
@@ -108,11 +136,16 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
             }
           });
         }
-        if (!enrich || !omdbKeys(settings)) return;
+        if (enrich || filesChanged) void service.refreshMedia().catch(() => {});
+        if (!enrich) return;
+        scanSummary = { files: Object.keys(files).length, found: Object.keys(files).filter((id) => !settings.files[id]?.length).length,
+          missing: Object.keys(settings.files).filter((id) => !files[id]).length, updated: 0 };
+        if (!omdbKeys(settings)) return;
+        activity = 'Looking up films on OMDb';
         const api = createOmdb(omdbKeys(settings));
         const pending = [...new Map(result.files.filter((file) => {
           const data = library.films[file.id]?.value;
-          return !data?.poster && !data?.description;
+          return missingMetadata(data);
         }).map((file) => [file.id, file])).values()];
         const updates = new Map();
         let metadataError;
@@ -120,7 +153,8 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
           while (pending.length && !metadataError) {
             const film = pending.shift();
             try {
-              const details = await api.identify(film.title, film.year);
+              const known = library.films[film.id]?.value;
+              const details = known?.imdb ? await api.details(known.imdb) : await api.identify(film.title, film.year);
               if (details) updates.set(film.id, details);
             } catch (error) { metadataError = error; }
           }
@@ -128,18 +162,25 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
         if (updates.size) await store.edit((current) => {
           for (const [id, details] of updates) {
             const film = current.films[id]?.value;
-            if (film && !film.poster && !film.description) put(current.films, id, withMetadata(film, details));
+            if (!film || !missingMetadata(film)) continue;
+            const filled = withMetadata(details, { ...film, title: film.imdb ? film.title : details.title });
+            if (Object.keys(filled).some((field) => filled[field] !== film[field])) {
+              put(current.films, id, filled);
+              scanSummary.updated++;
+            }
           }
         });
         if (metadataError) throw metadataError;
       }).catch((error) => {
         if (error.code !== 'ELOCKED') throw error;
       }).finally(() => { scanning = null; });
-      return scanning;
+      scanning = { promise, enrich };
+      return promise;
     },
     async sync(startup = false) {
       if (syncing) return syncing;
       errorMessage = '';
+      scanSummary = null;
       syncing = store.lockSync(async () => {
         activity = 'Scanning your drive';
         let scanError;
@@ -148,14 +189,27 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
         const { git } = await store.settings();
         if (git.remote && (!startup || git.startup)) {
           activity = 'Syncing with Git';
-          const lastSync = await syncGit(store, git);
-          await store.configure((settings) => {
-            if (settings.git.remote === git.remote && settings.git.branch === git.branch) settings.lastSync = lastSync;
-          });
+          try {
+            const lastSync = await syncGit(store, git);
+            await store.configure((settings) => {
+              if (settings.git.remote === git.remote && settings.git.branch === git.branch) settings.lastSync = lastSync;
+            });
+          } catch (error) { scanError ||= error; }
+        }
+        if (scanSummary) {
+          const [library, settings] = await Promise.all([store.library(), store.settings()]);
+          const films = Object.keys(settings.files).filter((id) => settings.files[id]?.length && library.films[id])
+            .map((id) => ({ ...library.films[id].value, id }));
+          try {
+            scanSummary.backdrops = await refreshBackdrops(store, films, (done, total) => {
+              activity = `Finding featured artwork · ${done}/${total}`;
+            });
+          } catch (error) { scanError ||= error; }
         }
         if (scanError) throw scanError;
       }).catch((error) => {
-        errorMessage = error.code === 'ELOCKED' ? 'Carribean is already syncing in another window.' : error.message;
+        if (startup && error.code === 'ELOCKED') return;
+        errorMessage = error.code === 'ELOCKED' ? 'Caribbean is already syncing in another window.' : error.message;
         if (!startup) throw new Error(errorMessage);
       }).finally(() => { syncing = null; activity = ''; });
       return syncing;
@@ -165,7 +219,7 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
       const legacy = process.env.APPDATA && path.join(process.env.APPDATA, 'theatre', 'theatre-data');
       if (legacy && !Object.keys((await store.library()).films).length) {
         try { await importLegacy(store, legacy, { automatic: true }); }
-        catch { errorMessage = 'The old Carribean library could not be imported.'; }
+        catch { errorMessage = 'The original Caribbean library could not be imported.'; }
       }
       void service.sync(true);
       watcher = setInterval(() => service.scan().catch((error) => { errorMessage = error.message; }), 30_000);
@@ -194,7 +248,7 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
             settings.git = git;
             if (payload.omdb || payload.clearOmdb) settings.omdb = String(payload.omdb || '').trim().slice(0, 500);
           });
-          if (folderChanged) { await scanning; await service.scan(); }
+          if (folderChanged) { await scanning?.promise; await service.scan(); }
           break;
         }
         case 'signIn': {
@@ -208,36 +262,16 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
             put(state.watched, id, payload.value === true);
           });
           break;
-        case 'list': {
-          const name = nameOf(payload.name);
-          if (!name) throw new Error('Give the watchlist a name.');
-          const savedListId = id || newListId();
-          await store.edit((state) => {
-            if (id && !state.lists[id]?.value) throw new Error('This watchlist is no longer available.');
-            put(state.lists, savedListId, { name });
-            if (payload.film) changeMembership(state, { id: payload.film.id, film: payload.film, list: savedListId, value: true });
-          });
-          return { ...await service.snapshot(), savedListId };
-        }
-        case 'removeList':
-          await store.edit((state) => {
-            if (state.lists[id]?.value) put(state.lists, id, null);
-          });
-          break;
-        case 'membership':
-          await store.edit((state) => changeMembership(state, payload));
-          break;
         case 'play': {
-          const settings = await store.settings();
-          const root = await realpath(settings.moviePath).catch(() => '');
-          for (const file of videoId(id) ? settings.files[id] || [] : []) {
-            const absolute = await realpath(file).catch(() => '');
-            if (root && absolute && relativeTo(root, absolute) && (await stat(absolute).catch(() => null))?.isFile()) {
-              await open(absolute);
-              return { played: true };
-            }
-          }
+          const movie = await localMovie(id);
+          if (movie) { await open(movie.absolute); return { played: true }; }
           throw new Error('This movie file is unavailable. Reconnect the drive and sync.');
+        }
+        case 'fileDetails': {
+          const movie = await localMovie(id);
+          if (!movie) return null;
+          const { source, version, ...details } = await mediaReader.details(id, movie);
+          return details;
         }
         case 'search': {
           const query = String(payload.query || '').trim().slice(0, 200);
@@ -246,9 +280,7 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
           const cacheKey = (keys ? 'omdb:' : 'wikidata:') + query.toLowerCase();
           const cached = searches.get(cacheKey);
           if (cached && cached.expires > Date.now()) return cached.promise;
-          const promise = (keys
-            ? createOmdb(keys).search(query).catch(() => searchWikidata(query))
-            : searchWikidata(query)).catch((error) => { searches.delete(cacheKey); throw error; });
+          const promise = searchOnline(query, keys).catch((error) => { searches.delete(cacheKey); throw error; });
           if (searches.size >= 48) searches.delete(searches.keys().next().value);
           searches.set(cacheKey, { promise, expires: Date.now() + 30 * 60 * 1000 });
           return promise;
@@ -259,8 +291,9 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
           if (poster && !cleanFilm({ poster }).poster) throw new Error('Use an HTTPS poster URL.');
           const keys = omdbKeys(await store.settings());
           const selected = candidate ? cleanFilm(candidate) : null;
+          const match = !imdb && selected?.imdb && keys ? await createOmdb(keys).details(selected.imdb).catch(() => null) : null;
           const details = imdb ? await createOmdb(keys).details(imdb)
-            : selected?.imdb && keys ? await createOmdb(keys).details(selected.imdb).catch(() => null) || selected : selected;
+            : match ? withMetadata(selected, match) : selected;
           if (imdb && !details) throw new Error('OMDb could not find that IMDb title.');
           await store.edit((state) => {
             if (!videoId(id) || !state.films[id]) throw new Error('This film is not in your collection.');
@@ -280,7 +313,7 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
         case 'import':
           await store.edit((state) => mergeLibrary(state, parseSnapshot(JSON.stringify(payload.library))));
           break;
-        default: throw new Error('Unknown Carribean action.');
+        default: throw new Error('Unknown Caribbean action.');
       }
       return service.snapshot();
     }

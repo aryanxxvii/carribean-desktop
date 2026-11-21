@@ -7,7 +7,7 @@ const videos = new Set(['.mkv', '.mp4', '.avi', '.mov', '.webm', '.wmv', '.flv',
 // Carribean's original naming conventions, plus releases ending directly in the year.
 export function parseFilename(fileName) {
   const base = path.parse(fileName).name;
-  const match = base.match(/^(.*?)\s*\((\d{4})\)(?:[ ._-].*)?$/)
+  const match = base.match(/^(.*?)\s*\((\d{4})\)(?:[ ._\[-].*)?$/)
     || base.match(/^(.*?)[. ]((?:18|19|20)\d{2})(?:[. ].*)?$/);
   return { title: (match?.[1] || base).replace(/[._]/g, ' ').trim(), year: match?.[2] || '' };
 }

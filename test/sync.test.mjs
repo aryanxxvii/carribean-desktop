@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { createService } from '../core/service.mjs';
 import { parseFilename } from '../core/scanner.mjs';
+import { createStorage, put } from '../core/storage.mjs';
 
 test('recognizes the old movie filename formats', () => {
   assert.deepEqual(parseFilename('Perfect Blue (1997).mkv'), { title: 'Perfect Blue', year: '1997' });
@@ -40,16 +41,20 @@ test('restores a library on a new device, merges edits, and keeps paths local', 
   const first = createService({ directory: path.join(temp, 'first'), open: async (file) => { playback = file; } });
   const second = createService({ directory: path.join(temp, 'second') });
 
-  let view = await first.action('configure', { moviePath: folderA, git });
+  const view = await first.action('configure', { moviePath: folderA, git });
   assert.equal(view.films.length, 1);
   const { id } = view.films[0];
   await first.action('play', { id });
   assert.equal(playback, await realpath(path.join(folderA, filmName)));
   await first.action('metadata', { id, poster: 'https://images.example.invalid/perfect-blue.jpg' });
   await first.action('watched', { id, value: true });
-  view = await first.action('list', { name: 'Friday films' });
-  const list = view.lists[0].id;
-  await first.action('membership', { id, list, value: true });
+  const list = 'list-8161bf5a-62dd-4db8-9b1d-65d9118f1146';
+  const entry = list + ':' + id;
+  const oldLibrary = createStorage(path.join(temp, 'first'));
+  await oldLibrary.edit((state) => {
+    put(state.lists, list, { name: 'Friday films' });
+    put(state.entries, entry, true);
+  });
   const initial = await first.action('sync');
   assert.ok(initial.device.lastSync);
 
@@ -59,15 +64,13 @@ test('restores a library on a new device, merges edits, and keeps paths local', 
   assert.equal(restored.films[0].onDisk, true);
   assert.equal(restored.films[0].watched, true);
   assert.equal(restored.films[0].poster, 'https://images.example.invalid/perfect-blue.jpg');
-  assert.deepEqual(restored.lists[0].filmIds, [id]);
+  assert.equal((await second.action('export')).entries[entry].value, true);
 
-  await first.action('list', { id: list, name: 'Weekend films' });
+  await oldLibrary.edit((state) => { put(state.lists, list, { name: 'Weekend films' }); });
   await second.action('watched', { id, value: false });
-  await second.action('membership', { id, list, value: false });
   await first.action('sync');
   const merged = await second.action('sync');
-  assert.equal(merged.lists[0].name, 'Weekend films');
-  assert.deepEqual(merged.lists[0].filmIds, []);
+  assert.equal((await second.action('export')).lists[list].value.name, 'Weekend films');
   assert.equal(merged.films[0].watched, false);
 
   const snapshot = gitCommand(['--git-dir', remote, 'show', git.branch + ':carribean-library.json']);
@@ -76,5 +79,4 @@ test('restores a library on a new device, merges edits, and keeps paths local', 
   const offline = await second.action('sync');
   assert.equal(offline.device.connected, false);
   assert.equal(offline.films[0].onDisk, false);
-  assert.equal(offline.lists[0].name, 'Weekend films');
 });

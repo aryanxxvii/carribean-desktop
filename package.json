@@ -1,9 +1,9 @@
 {
   "name": "carribean",
-  "productName": "Carribean",
-  "version": "1.0.0",
+  "productName": "Caribbean",
+  "version": "1.2.2",
   "private": true,
-  "description": "Your personal film library and watchlists.",
+  "description": "Your personal film library.",
   "author": "Aryan Wadhawan",
   "type": "module",
   "main": "desktop/main.mjs",
@@ -33,7 +33,9 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Carribean-Setup-${version}.${ext}"
+      "shortcutName": "Caribbean Desktop",
+      "include": "branding/installer.nsh",
+      "artifactName": "Caribbean-Setup-${version}.${ext}"
     }
   }
 }

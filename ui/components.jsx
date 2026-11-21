@@ -1,24 +1,16 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  ArrowDownWideNarrow, ArrowUpNarrowWide, Bookmark, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert,
-  Clapperboard, Compass, Film, HardDrive, Layers3, Play, Plus, Search, Shuffle, Star, X
+  ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert,
+  Film, Layers3, Play, Search, Shuffle, Star, X
 } from 'lucide-react';
 import { asset } from './api';
 import { activeFilters, genreNames } from './library';
 import posterCache from './posters.json';
 import discovery from './discovery.json';
+import backdrops from '../core/bundled-backdrops.json';
 
-const spotlightFrames = {
-  tt0816692: ['interstellar', '52% 34%', '58% 44%'],
-  tt1856101: ['blade-runner-2049', '55% 61%', '65% 49%'],
-  tt15239678: ['dune-part-two', '53% 32%', '63% 47%'],
-  tt2543164: ['arrival', '52% 18%', '60% 46%'],
-  tt0068646: ['the-godfather', '50% 17%', '65% 47%'],
-  'rec-1': ['white-sun', '55% 22%', '66% 49%'],
-  'rec-2': ['a-road-to-a-village', '50% 59%', '68% 48%'],
-  'rec-3': ['kagbeni', '54% 34%', '69% 47%'],
-  'rec-4': ['pashupati-prasad', '53% 30%', '62% 46%'],
-};
+const filmBackdrop = (film) => asset(backdrops[film.imdb]) || film.backdrop;
+export const hasStill = (film) => !!filmBackdrop(film);
 const discoveryPosters = new Map(discovery.map((film) => [film.imdb, film.poster]));
 export const moviePoster = (film) => {
   const cached = posterCache[film.imdb];
@@ -28,14 +20,21 @@ export const moviePoster = (film) => {
   return asset(film.poster);
 };
 export const prettyNumber = (number) => number.toLocaleString();
+export function fileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  let size = bytes;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let unit = 0;
+  while (size >= 1000 && unit < units.length - 1) {
+    size /= 1000;
+    unit++;
+  }
+  return size.toLocaleString(undefined, { maximumFractionDigits: unit ? 1 : 0 }) + ' ' + units[unit];
+}
 export const movieFacts = (film) => [film.year, film.runtime ? film.runtime + ' min' : '', genreNames(film).slice(0, 2).join(' · ') || film.mood].filter(Boolean);
 export const shortDescription = (film) => film.imdb === 'tt0816692'
   ? 'With Earth dying, a pilot leads a team through a wormhole in search of a new home for humanity.'
   : film.description;
-
-export function Brand() {
-  return <div className="brand"><Film size={13} strokeWidth={1.65} aria-hidden="true" /><span>Carribean</span></div>;
-}
 
 export function IconButton({ icon: Icon, label, className = '', children, ...props }) {
   return <button type="button" className={'glass icon-button ' + className} title={label} aria-label={label} {...props}>
@@ -43,68 +42,66 @@ export function IconButton({ icon: Icon, label, className = '', children, ...pro
   </button>;
 }
 
-export function Sidebar({ view, select, lists, onCreate, device, onSettings, count, filterPanel, filtersOpen }) {
-  return <aside className="sidebar glass" data-ambient>
-    <Brand />
-    <div className="side-content">
-      <nav className="side-nav" aria-label="Main navigation">
-        <button className={'side-link glass ' + (view === 'library' ? 'selected' : '')} onClick={() => select('library')} aria-current={view === 'library' ? 'page' : undefined}>
-          <Clapperboard size={18} /><span>Library</span><span className="side-count">{prettyNumber(count)}</span>
-        </button>
-        <button className={'side-link glass ' + (view === 'discover' ? 'selected' : '')} onClick={() => select('discover')} aria-current={view === 'discover' ? 'page' : undefined}>
-          <Compass size={18} /><span>Discover</span>
-        </button>
-      </nav>
-      <nav className="side-watchlists" aria-label="Watchlists">
-        <div className="side-label side-label-row">
-          <button className={'side-link glass ' + (view === 'watchlists' ? 'selected' : '')} onClick={() => select('watchlists')}
-            aria-current={view === 'watchlists' ? 'page' : undefined}><Bookmark size={16} /><span>Watchlists</span></button>
-          <IconButton icon={Plus} label="New watchlist" className="side-add" onClick={onCreate} />
-        </div>
-        {lists.map((list) => <button key={list.id} title={list.name} className={'side-link glass ' + (view === list.id ? 'selected' : '')}
-          aria-current={view === list.id ? 'page' : undefined} onClick={() => select(list.id)}>
-          <Bookmark size={16} /><span>{list.name}</span><span className="side-count">{list.filmIds.length}</span>
-        </button>)}
-      </nav>
-      {filterPanel && <div id="library-filters" className={'filter-drawer' + (filtersOpen ? ' open' : '')}>{filterPanel}</div>}
-    </div>
-    <div className="side-bottom">
-      <button className="glass drive-card" onClick={onSettings} title={device.moviePath || 'Connect a drive'}>
-        <span className="drive-icon"><HardDrive size={19} strokeWidth={1.65} /></span>
-        <span className="drive-copy"><strong>Local drive</strong>
-          <small><i className={device.connected ? 'online' : ''} />{device.connected ? 'Connected' : device.moviePath ? 'Disconnected' : 'Choose a folder'}</small>
-        </span>
-        <ChevronRight size={14} />
-      </button>
-    </div>
-  </aside>;
+const preparedArtwork = new Map();
+
+async function decodeArtwork(url) {
+  if (!url) return '';
+  const image = new Image();
+  image.src = url;
+  let timer;
+  try {
+    const decoded = await Promise.race([image.decode().then(() => true), new Promise((resolve) => {
+      timer = setTimeout(() => resolve(false), 3000);
+    })]);
+    return decoded ? url : '';
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-function FilmArtwork({ film, active }) {
-  const [failedImages, setFailedImages] = useState([]);
-  const frame = spotlightFrames[film.recommendationId] || spotlightFrames[film.imdb];
-  const still = frame && asset('art/spotlight/' + frame[0] + '.webp');
-  const src = [still, moviePoster(film)].find((image) => image && !failedImages.includes(image));
-  const focus = still && src === still ? frame.slice(1) : ['50% 33%', '58% 34%'];
-  return <div className="spotlight-art" data-current={active}
-    style={{ '--art-focus': focus[0], '--art-focus-narrow': focus[1] }}>
-    {src && <img key={src} className="spotlight-image" src={src} alt="" fetchPriority={active ? 'high' : 'low'}
-      decoding="async" data-glass-art={active ? '' : undefined}
-      onError={() => setFailedImages((images) => [...images, src])} />}
-  </div>;
+function prepareArtwork(film) {
+  const key = [film.id, film.imdb, film.poster, film.backdrop].join('|');
+  if (preparedArtwork.has(key)) return preparedArtwork.get(key);
+  if (preparedArtwork.size >= 32) preparedArtwork.delete(preparedArtwork.keys().next().value);
+  const task = (async () => {
+    const landscape = await decodeArtwork(filmBackdrop(film));
+    if (landscape) return { src: landscape, portrait: false };
+    return { src: await decodeArtwork(moviePoster(film)), portrait: true };
+  })();
+  preparedArtwork.set(key, task);
+  return task;
 }
 
-export function Spotlight({ film, movies, onMove, onSet, onDetails, onPlay, onSave, discover = false }) {
+export function Spotlight({ film: selected, movies, onMove, onSet, onDetails, onPlay }) {
+  const [slide, setSlide] = useState(null);
+  const film = slide && (movies.find((movie) => movie.id === slide.film.id) || slide.film);
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    void prepareArtwork(selected).then((artwork) => { if (active) setSlide({ film: selected, artwork }); });
+    return () => { active = false; };
+  }, [selected?.id, selected?.imdb, selected?.poster, selected?.backdrop]);
+  useEffect(() => {
+    const index = movies.findIndex((movie) => movie.id === film?.id);
+    if (index < 0 || movies.length < 2) return;
+    for (const step of [1, -1]) void prepareArtwork(movies[(index + step + movies.length) % movies.length]);
+  }, [film?.id, movies]);
+  if (!slide) return <section className="spotlight spotlight-loading" aria-label="Featured films" aria-busy="true" />;
   if (!film) return null;
-  const position = movies.indexOf(film);
-  return <section className="spotlight" data-art-source aria-label={discover ? 'Featured recommendation' : 'Featured film'}>
+  const position = movies.findIndex((movie) => movie.id === film.id);
+  const pending = film.id !== selected?.id;
+  return <section className="spotlight" data-art-source aria-label="Featured film" aria-busy={pending}>
     <div className="spotlight-images" aria-hidden="true">
-      {movies.map((movie) => <FilmArtwork key={movie.id} film={movie} active={film.id === movie.id} />)}
+      <div key={film.id} className={'spotlight-art' + (slide.artwork.portrait ? ' portrait-art' : '')} data-current="true">
+        {slide.artwork.src && <img className="spotlight-image" src={slide.artwork.src} alt="" data-glass-art />}
+      </div>
     </div>
     <div className="spotlight-shade" />
     <div className="spotlight-copy">
       <div className="spotlight-caption" key={film.id}>
-        <span className="feature-label">{discover ? 'Afterlight' : 'Featured'}</span>
+        <span className="feature-label">Featured {position >= 0 && <span className="feature-position">· {position + 1} of {movies.length}</span>}</span>
         <h2>{film.title}</h2>
         <div className="spotlight-facts">
           {movieFacts(film).map((fact) => <span key={fact}>{fact}</span>)}
@@ -113,9 +110,7 @@ export function Spotlight({ film, movies, onMove, onSet, onDetails, onPlay, onSa
         {shortDescription(film) && <p>{shortDescription(film)}</p>}
       </div>
       <div className="spotlight-actions">
-        {film.onDisk
-          ? <button className="button glass primary" onClick={() => onPlay(film)}><Play size={15} fill="currentColor" />Play film</button>
-          : <button className="button glass primary" onClick={() => onSave(film)}><Bookmark size={17} />Save film</button>}
+        <button className="button glass primary" onClick={() => onPlay(film)}><Play size={15} fill="currentColor" />Play film</button>
         <button className="button glass secondary" onClick={() => onDetails(film)}>Film details</button>
       </div>
     </div>
@@ -132,7 +127,7 @@ export function Spotlight({ film, movies, onMove, onSet, onDetails, onPlay, onSa
   </section>;
 }
 
-export function Card({ film, saved, onDetails, onSave, onWatched }) {
+export function Card({ film, onDetails, onWatched }) {
   const image = moviePoster(film);
   return <article className="movie-card">
     <div className="poster-box" data-art-source>
@@ -141,11 +136,8 @@ export function Card({ film, saved, onDetails, onSave, onWatched }) {
         {image && <img key={image} src={image} alt="" loading="lazy" decoding="async" data-glass-art onError={(event) => { event.currentTarget.hidden = true; }} />}
       </button>
       {film.rating > 0 && <span className="poster-rating glass"><Star size={12} fill="currentColor" />{film.rating.toFixed(1)}</span>}
-      <IconButton icon={Bookmark} className={'bookmark ' + (saved ? 'saved' : '')} label={'Watchlists for ' + film.title}
-        aria-pressed={saved} onClick={() => onSave(film)} />
-      {film.catalogued && !film.onDisk && <span className="poster-offline glass" title="File unavailable on this device">Offline</span>}
-      {film.id.startsWith('film-') && onWatched && <IconButton icon={Check} className={'poster-seen ' + (film.watched ? 'watched' : '')}
-        label={(film.watched ? 'Mark unwatched ' : 'Mark watched ') + film.title} aria-pressed={!!film.watched} onClick={() => onWatched(film)} />}
+      <IconButton icon={Check} className={'poster-seen ' + (film.watched ? 'watched' : '')}
+        label={(film.watched ? 'Mark unwatched ' : 'Mark watched ') + film.title} aria-pressed={!!film.watched} onClick={() => onWatched(film)} />
     </div>
     <button className="movie-name" onClick={() => onDetails(film)} title={film.title}>{film.title}</button>
     <div className="movie-facts">
@@ -155,9 +147,34 @@ export function Card({ film, saved, onDetails, onSave, onWatched }) {
   </article>;
 }
 
+function FilmRow({ film, onDetails, onPlay, onWatched }) {
+  const image = moviePoster(film);
+  const genres = genreNames(film).slice(0, 2).join(' · ') || film.origin;
+  return <li className="film-row">
+    <button className="row-film" type="button" onClick={() => onDetails(film)}>
+      <span className="row-poster"><Film size={17} />{image && <img key={image} src={image} alt="" loading="lazy"
+        onError={(event) => { event.currentTarget.hidden = true; }} />}</span>
+      <span className="row-title"><strong>{film.title}</strong>
+        <small>{[film.year, film.runtime ? film.runtime + ' min' : '', film.file?.resolution, fileSize(film.file?.size)].filter(Boolean).join(' · ')}</small>
+      </span>
+    </button>
+    <span className="row-credits"><span>{film.director || '—'}</span>{genres && <small>{genres}</small>}</span>
+    <span className="row-rating">{film.rating > 0 ? <><Star size={13} fill="currentColor" />{film.rating.toFixed(1)}</> : '—'}</span>
+    <div className="row-actions">
+      <IconButton icon={Play} label={'Play ' + film.title} onClick={() => onPlay(film)} />
+      <IconButton icon={Check} label={(film.watched ? 'Mark unwatched ' : 'Mark watched ') + film.title}
+        aria-pressed={!!film.watched} onClick={() => onWatched(film)} />
+    </div>
+  </li>;
+}
+
 export function MovieGrid({ movies, listMode, ...props }) {
-  return <div className={listMode ? 'movie-grid list-mode' : 'movie-grid'}>
-    {movies.map((film) => <Card key={film.id} film={film} {...props} saved={props.isSaved(film)} />)}
+  if (listMode) return <div className="film-table">
+    <div className="film-row row-head" aria-hidden="true"><span>Film</span><span className="row-credits">Director / Genre</span><span className="row-rating">IMDb</span><span /></div>
+    <ul className="film-rows">{movies.map((film) => <FilmRow key={film.id} film={film} {...props} />)}</ul>
+  </div>;
+  return <div className="movie-grid">
+    {movies.map((film) => <Card key={film.id} film={film} {...props} />)}
   </div>;
 }
 
@@ -175,7 +192,7 @@ export function ScrollContinuation({ page, onLoad }) {
   return <div ref={marker} className="scroll-continuation" aria-hidden="true" />;
 }
 
-export function Shelf({ title, movies, ...props }) {
+export function Shelf({ title, reason, movies, ...props }) {
   const track = useRef(null);
   const [visible, setVisible] = useState(16);
   const [ends, setEnds] = useState([true, false]);
@@ -202,7 +219,7 @@ export function Shelf({ title, movies, ...props }) {
   }
   return <section className="film-shelf" aria-label={title}>
     <div className="shelf-heading">
-      <h2>{title}</h2>
+      <div><h2>{title}</h2>{reason && <p className="shelf-reason">{reason}</p>}</div>
       <div className="shelf-arrows">
         <IconButton icon={ChevronLeft} label={'Previous in ' + title} disabled={ends[0]} onClick={() => scroll(-1)} />
         <IconButton icon={ChevronRight} label={'Next in ' + title} disabled={ends[1]} onClick={() => scroll(1)} />
@@ -214,7 +231,7 @@ export function Shelf({ title, movies, ...props }) {
         event.preventDefault();
         scroll(event.key === 'ArrowRight' ? 1 : -1);
       }}>
-      {movies.slice(0, visible).map((film) => <Card key={film.id} film={film} {...props} saved={props.isSaved(film)} />)}
+      {movies.slice(0, visible).map((film) => <Card key={film.id} film={film} {...props} />)}
     </div>
   </section>;
 }
@@ -254,14 +271,13 @@ function Choice({ icon: Icon, label, value, values, onChange }) {
   </label>;
 }
 
-export function LibraryFilters({ filters, genres, change, reset, onSurprise }) {
+export function LibraryFilters({ filters, genres, change, reset, onSurprise, canSurprise }) {
   const { status, genre, min, max, sort, descending, group, groupOrder } = filters;
   const presets = [['Any', 0, 600], ['Short', 1, 99], ['Feature', 100, 139], ['Long', 140, 600]];
   const quickGenres = ['', ...genres.slice(0, 5)];
   return <section className="library-filters" aria-label="Library filters">
-    <div className="filter-heading"><h2>Filters</h2>{activeFilters(filters) && <button type="button" className="text-action" onClick={reset}>Reset</button>}</div>
     <div className="filter-block">
-      <h3>Genre</h3>
+      <div className="filter-label"><h3>Genre</h3>{activeFilters(filters) && <button type="button" className="text-action" onClick={reset}>Reset</button>}</div>
       <div className="quick-genres">{quickGenres.map((value) => <button type="button" className={'glass filter-chip' + (genre === value ? ' chosen' : '')}
         key={value} aria-pressed={genre === value} onClick={() => change({ genre: value })}>{value || 'All'}</button>)}</div>
       <Choice label="Genre" value={genre} values={[[ '', 'All genres' ], ...[...genres].sort().map((name) => [name, name])]} onChange={(value) => change({ genre: value })} />
@@ -294,15 +310,15 @@ export function LibraryFilters({ filters, genres, change, reset, onSurprise }) {
           onChange={(value) => change({ sort: value, descending: ['year', 'rating'].includes(value) })} />
         <IconButton icon={descending ? ArrowDownWideNarrow : ArrowUpNarrowWide} label={descending ? 'Descending order' : 'Ascending order'} onClick={() => change({ descending: !descending })} />
       </div>
-      <Choice icon={Layers3} label="Group films" value={group} values={[[ '', 'No grouping' ], ['director', 'By director'], ['genre', 'By genre'], ['runtime', 'By runtime']]} onChange={(value) => change({ group: value })} />
+      <Choice icon={Layers3} label="Group films" value={group} values={[[ '', 'No grouping' ], ['director', 'By director'], ['genre', 'By genre'], ['decade', 'By decade'], ['runtime', 'By runtime']]} onChange={(value) => change({ group: value })} />
       {group && <Choice label="Sort groups" value={groupOrder} values={[[ 'name', 'Group name' ], ['count', 'Film count' ]]} onChange={(value) => change({ groupOrder: value })} />}
     </div>
-    <button type="button" className="glass button surprise" data-ambient onClick={onSurprise}><Shuffle size={15} />Surprise me</button>
+    <button type="button" className="glass button surprise" data-ambient disabled={!canSurprise} onClick={onSurprise}><Shuffle size={15} />Surprise me</button>
   </section>;
 }
 
-export function TopSearch({ searchRef, query, onSearch, onSubmit }) {
-  return <form className="top-search glass" role="search" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
+export function TopSearch({ searchRef, query, onSearch }) {
+  return <form className="top-search glass" role="search" onSubmit={(event) => { event.preventDefault(); searchRef.current?.blur(); }}>
     <canvas className="glass-window" aria-hidden="true" />
     <Search size={17} />
     <input ref={searchRef} placeholder="Search films" aria-label="Search films" value={query} onChange={(event) => onSearch(event.target.value)} />

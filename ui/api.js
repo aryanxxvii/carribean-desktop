@@ -12,7 +12,7 @@ export async function call(action, payload) {
     body: JSON.stringify({ action, payload })
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'Carribean could not reach the local library.');
+  if (!response.ok) throw new Error(result.error || 'Caribbean could not reach the local library.');
   return result;
 }
 

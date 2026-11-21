@@ -34,20 +34,30 @@ export function withMetadata(previous, incoming) {
 }
 
 export function createOmdb(keys) {
-  const tokens = keys.split(',').map((key) => key.trim()).filter(Boolean);
+  const tokens = [...new Set(keys.split(',').map((key) => key.trim()).filter(Boolean))];
+  const rejected = new Set();
   let next = 0;
   async function request(params) {
     if (!tokens.length) throw new Error('Add an OMDb key in Settings to search the full film catalog.');
-    const url = new URL('https://www.omdbapi.com/');
-    url.search = new URLSearchParams({ ...params, apikey: tokens[next++ % tokens.length], type: 'movie' });
-    const response = await fetch(url, { signal: AbortSignal.timeout(8000) }).catch(() => {
-      throw new Error('Could not reach OMDb.');
-    });
-    if (!response.ok) throw new Error('OMDb is temporarily unavailable.');
-    const result = await response.json();
-    if (result.Response === 'True') return result;
-    if (/key|limit/i.test(result.Error || '')) throw new Error('OMDb rejected the API key or its daily limit has been reached.');
-    return null;
+    const start = next++ % tokens.length;
+    for (let index = 0; index < tokens.length; index++) {
+      const token = tokens[(start + index) % tokens.length];
+      if (rejected.has(token)) continue;
+      const url = new URL('https://www.omdbapi.com/');
+      url.search = new URLSearchParams({ ...params, apikey: token, type: 'movie' });
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) }).catch(() => {
+        throw new Error('Could not reach OMDb.');
+      });
+      const result = await response.json().catch(() => ({}));
+      if (result.Response === 'True') return result;
+      if ([401, 403, 429].includes(response.status) || /key|limit/i.test(result.Error || '')) {
+        rejected.add(token);
+        continue;
+      }
+      if (!response.ok || result.Response !== 'False') throw new Error('OMDb is temporarily unavailable.');
+      return null;
+    }
+    throw new Error('OMDb rejected the configured keys or their daily limits have been reached.');
   }
   async function search(title, year = '') {
     const found = await request({ s: title, y: year });
@@ -58,15 +68,13 @@ export function createOmdb(keys) {
     return match ? cleanFilm(match) : null;
   }
   async function identify(title, year) {
+    const matches = (film) => film?.title && filmId(film.title, film.year) === filmId(title, year || film.year);
     const exact = await request({ t: title, y: year, plot: 'full' });
-    if (exact && exact.Director !== 'N/A') return cleanFilm(exact);
+    const direct = exact && cleanFilm(exact);
+    if (matches(direct)) return direct;
     const candidates = await search(title, year);
-    for (const candidate of candidates.slice(0, 3)) {
-      if (/q&a|interview/i.test(candidate.title)) continue;
-      const match = await details(candidate.imdb);
-      if (match?.director && match.poster) return match;
-    }
-    return null;
+    const candidate = candidates.find(matches);
+    return candidate?.imdb ? details(candidate.imdb) : null;
   }
   return { search, details, identify };
 }
