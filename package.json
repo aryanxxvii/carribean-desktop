@@ -1,7 +1,7 @@
 {
   "name": "carribean",
   "productName": "Caribbean",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "private": true,
   "description": "Your personal film library.",
   "author": "Aryan Wadhawan",
@@ -27,9 +27,19 @@
   },
   "build": {
     "appId": "com.carribean.library",
-    "directories": { "output": "release" },
-    "files": ["desktop/**", "core/**", "dist/**", "package.json"],
-    "win": { "icon": "branding/icon.ico", "signExecutable": false },
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/**",
+      "core/**",
+      "dist/**",
+      "package.json"
+    ],
+    "win": {
+      "icon": "branding/icon.ico",
+      "signExecutable": false
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

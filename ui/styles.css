@@ -448,9 +448,14 @@ kbd { color: #bcbcbc; background: #0b0b0b69; border: 1px solid #ffffff1c; border
 .poster-seen.icon-button svg { width: 14px; height: 14px; }
 .poster-seen.icon-button { bottom: 5px; right: 5px; width: 26px; min-height: 26px; }
 .poster-box .glass[aria-pressed='true'] { --art-glass-veil: #ffffff39; }
-.poster-seen.icon-button svg { opacity: .74; transition: opacity .28s var(--flow), stroke-width .28s var(--flow); }
-.poster-seen.icon-button:is(.watched, :hover, :focus-visible) svg { opacity: 1; }
-.poster-seen.icon-button.watched svg { stroke-width: 2.65; }
+.poster-seen.watch-toggle[aria-pressed='false'] { background: #111c; border: 1px solid #ffffff55; }
+.poster-seen.watch-toggle[aria-pressed='false']::before { opacity: 0; }
+.watch-toggle.glass[aria-pressed='true'] {
+  background: #8bf0bb; color: #102b20; border: 1px solid #c4f9dc;
+  text-shadow: none; box-shadow: 0 2px 8px #0006;
+}
+.watch-toggle.glass[aria-pressed='true']::before { opacity: 0; }
+.watch-toggle.glass[aria-pressed='true'] svg { stroke-width: 2.8; filter: none; }
 .movie-name {
   color: #ededed; width: 100%; display: block; text-align: left; padding: 6px 0 0; border: 0; background: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 620;
@@ -581,7 +586,14 @@ kbd { color: #bcbcbc; background: #0b0b0b69; border: 1px solid #ffffff1c; border
   background: #ffffff05; color: #eee; font-size: 10px; font-weight: 620;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+.format-mark { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
 .format-mark img { width: auto; height: 14px; max-width: 91px; object-fit: contain; filter: brightness(0) invert(.95); }
+.format-choices { display: flex; flex-wrap: wrap; gap: 4px; }
+.format-choices .filter-chip { display: inline-flex; align-items: center; padding-inline: 7px; }
+.shelf-title .format-mark img { scale: 1; height: 23px; max-width: 155px; }
+.shelf-title .format-mark img[alt='Dolby Atmos'] { height: 17px; }
+.shelf-title .format-mark img[alt^='IMAX'] { height: 14px; }
+.shelf-title .format-mark span { font-size: 13px; }
 .format-mark img[alt='Dolby Vision'] { height: 16px; }
 .format-mark img[alt='Dolby Atmos'] { height: 10px; }
 .format-mark img[alt^='IMAX'] { height: 8px; }

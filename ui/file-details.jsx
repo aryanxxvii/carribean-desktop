@@ -1,17 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { asset, call } from './api';
+import { call } from './api';
 import { fileSize } from './components';
+import { FormatMark } from './format-mark';
+import { formatMarks as marks } from './media-formats';
 
 const languages = new Intl.DisplayNames(navigator.languages, { type: 'language' });
-const marks = {
-  'Dolby Atmos': 'dolby-atmos.svg',
-  'Dolby Vision': 'dolby-vision.svg',
-  'Dolby Digital': 'dolby-digital.png',
-  'Dolby Digital Plus': 'dolby-digital-plus.png',
-  'IMAX': 'imax.png',
-  'DTS': 'dts.png'
-};
 
 function languageOf(code) {
   if (!code || code === 'und') return '';
@@ -78,9 +72,9 @@ export function FilmFile({ id, cached }) {
   return <details className="file-specs" onToggle={(event) => setExpanded(event.currentTarget.open)}>
     <summary className="file-badges">
       {(badges.length ? badges : [{ label: 'File details' }]).map(({ label, mark, suffix, title }, index) => <span key={label}
-        className={'format-badge' + (mark ? ' format-mark' : '') + (index === Math.max(0, badges.length - 1) ? ' format-badge-toggle' : '')}
+        className={'format-badge' + (index === Math.max(0, badges.length - 1) ? ' format-badge-toggle' : '')}
         title={title ? `${title} · ${label}` : label}>
-        {mark ? <><img src={asset('art/formats/' + marks[mark])} alt={label} />{suffix && <span aria-hidden="true">{suffix}</span>}</> : label}
+        <FormatMark label={label} mark={mark} suffix={suffix} />
         {index === Math.max(0, badges.length - 1) && <ChevronDown className="file-toggle" size={11} aria-hidden="true" />}
       </span>)}
       {!!badges.length && <span className="sr-only">File details</span>}

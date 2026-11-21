@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert,
+  ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown, ChevronLeft, ChevronRight, Circle, CircleAlert,
   Film, Layers3, Play, Search, Shuffle, Star, X
 } from 'lucide-react';
 import { asset } from './api';
 import { activeFilters, genreNames } from './library';
+import { FormatMark } from './format-mark';
+import { formatGroups } from './media-formats';
 import posterCache from './posters.json';
 import discovery from './discovery.json';
 import backdrops from '../core/bundled-backdrops.json';
@@ -136,7 +138,7 @@ export function Card({ film, onDetails, onWatched }) {
         {image && <img key={image} src={image} alt="" loading="lazy" decoding="async" data-glass-art onError={(event) => { event.currentTarget.hidden = true; }} />}
       </button>
       {film.rating > 0 && <span className="poster-rating glass"><Star size={12} fill="currentColor" />{film.rating.toFixed(1)}</span>}
-      <IconButton icon={Check} className={'poster-seen ' + (film.watched ? 'watched' : '')}
+      <IconButton icon={film.watched ? Check : Circle} className='poster-seen watch-toggle'
         label={(film.watched ? 'Mark unwatched ' : 'Mark watched ') + film.title} aria-pressed={!!film.watched} onClick={() => onWatched(film)} />
     </div>
     <button className="movie-name" onClick={() => onDetails(film)} title={film.title}>{film.title}</button>
@@ -162,7 +164,7 @@ function FilmRow({ film, onDetails, onPlay, onWatched }) {
     <span className="row-rating">{film.rating > 0 ? <><Star size={13} fill="currentColor" />{film.rating.toFixed(1)}</> : '—'}</span>
     <div className="row-actions">
       <IconButton icon={Play} label={'Play ' + film.title} onClick={() => onPlay(film)} />
-      <IconButton icon={Check} label={(film.watched ? 'Mark unwatched ' : 'Mark watched ') + film.title}
+      <IconButton icon={film.watched ? Check : Circle} className="watch-toggle" label={(film.watched ? 'Mark unwatched ' : 'Mark watched ') + film.title}
         aria-pressed={!!film.watched} onClick={() => onWatched(film)} />
     </div>
   </li>;
@@ -192,7 +194,7 @@ export function ScrollContinuation({ page, onLoad }) {
   return <div ref={marker} className="scroll-continuation" aria-hidden="true" />;
 }
 
-export function Shelf({ title, reason, movies, ...props }) {
+export function Shelf({ title, reason, movies, mark, suffix, ...props }) {
   const track = useRef(null);
   const [visible, setVisible] = useState(16);
   const [ends, setEnds] = useState([true, false]);
@@ -219,7 +221,7 @@ export function Shelf({ title, reason, movies, ...props }) {
   }
   return <section className="film-shelf" aria-label={title}>
     <div className="shelf-heading">
-      <div><h2>{title}</h2>{reason && <p className="shelf-reason">{reason}</p>}</div>
+      <div><h2 className="shelf-title"><FormatMark label={title} mark={mark} suffix={suffix} /></h2>{reason && <p className="shelf-reason">{reason}</p>}</div>
       <div className="shelf-arrows">
         <IconButton icon={ChevronLeft} label={'Previous in ' + title} disabled={ends[0]} onClick={() => scroll(-1)} />
         <IconButton icon={ChevronRight} label={'Next in ' + title} disabled={ends[1]} onClick={() => scroll(1)} />
@@ -271,7 +273,7 @@ function Choice({ icon: Icon, label, value, values, onChange }) {
   </label>;
 }
 
-export function LibraryFilters({ filters, genres, change, reset, onSurprise, canSurprise }) {
+export function LibraryFilters({ filters, genres, films, change, reset, onSurprise, canSurprise }) {
   const { status, genre, min, max, sort, descending, group, groupOrder } = filters;
   const presets = [['Any', 0, 600], ['Short', 1, 99], ['Feature', 100, 139], ['Long', 140, 600]];
   const quickGenres = ['', ...genres.slice(0, 5)];
@@ -303,6 +305,21 @@ export function LibraryFilters({ filters, genres, change, reset, onSurprise, can
       <GlassSegment label="Filter by watch status" value={status} choices={[[ 'all', 'All' ], ['unwatched', 'Unwatched'], ['watched', 'Watched']]}
         onChange={(value) => change({ status: value })} className="status-segment" />
     </div>
+    {Object.entries(formatGroups).map(([label, options], index) => {
+      const key = ['edition', 'resolution', 'dynamicRange', 'audio'][index];
+      const choices = options.filter(([id, , matches]) => filters[key] === id || films.some((film) => matches(film.file)));
+      if (!choices.length) return null;
+      return <div className="filter-block" key={key} role="group" aria-label={label}>
+        <h3>{label}</h3>
+        <div className="format-choices">
+          {[['', 'Any'], ...choices].map(([id, name, , mark, suffix]) => <button type="button"
+            className={'glass filter-chip' + (filters[key] === id ? ' chosen' : '')} key={id}
+            aria-label={name} title={name} aria-pressed={filters[key] === id} onClick={() => change({ [key]: id })}>
+            <FormatMark label={name} mark={mark} suffix={suffix} />
+          </button>)}
+        </div>
+      </div>;
+    })}
     <div className="filter-block">
       <h3>Sort &amp; group</h3>
       <div className="sort-field">

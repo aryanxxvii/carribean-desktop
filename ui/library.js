@@ -1,5 +1,7 @@
+import { homeFormats, mediaFormats } from './media-formats.js';
+
 export const genreNames = (film) => (film.genre || '').split(',').map((genre) => genre.trim()).filter(Boolean);
-export const defaultFilters = { genre: '', min: 0, max: 600, status: 'all', sort: '', descending: false, group: '', groupOrder: 'name' };
+export const defaultFilters = { genre: '', edition: '', resolution: '', dynamicRange: '', audio: '', min: 0, max: 600, status: 'all', sort: '', descending: false, group: '', groupOrder: 'name' };
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 const titles = (a, b) => collator.compare(a.title, b.title);
 export const activeFilters = (filters) => Object.keys(defaultFilters).some((key) => filters[key] !== defaultFilters[key]);
@@ -29,6 +31,8 @@ export function genresIn(films) {
 }
 
 export function filterLibrary(catalogue, filters) {
+  const formatChecks = [filters.edition, filters.resolution, filters.dynamicRange, filters.audio]
+    .filter(Boolean).map((key) => mediaFormats.find(([id]) => id === key)?.[2]).filter(Boolean);
   const filteringRuntime = filters.min > 0 || filters.max < 600;
   const people = (value) => value || '\uffff';
   const by = {
@@ -39,6 +43,7 @@ export function filterLibrary(catalogue, filters) {
     rating: (a, b) => a.rating - b.rating
   };
   return catalogue.filter((film) => (!filters.genre || genreNames(film).includes(filters.genre))
+    && formatChecks.every((matches) => matches(film.file))
     && (!filteringRuntime || (film.runtime && film.runtime >= filters.min && film.runtime <= filters.max))
     && (filters.status === 'all' || film.watched === (filters.status === 'watched')))
     .sort((a, b) => {
@@ -108,12 +113,12 @@ export function programLibrary(films, { seed, recent, hasPoster, hasStill }) {
 
   const shelves = [];
   const shown = new Set(featured.map((film) => film.id));
-  function add(name, reason, items, strict = false) {
+  function add(name, reason, items, strict = false, mark, suffix) {
     if (!items.length) return;
     const ordered = strict ? items : ranked(items, name);
     const arranged = strict ? ordered : [...ordered.filter((film) => !shown.has(film.id)), ...ordered.filter((film) => shown.has(film.id))];
     arranged.slice(0, 7).forEach((film) => shown.add(film.id));
-    shelves.push({ name, reason, movies: arranged });
+    shelves.push({ name, reason, movies: arranged, mark, suffix });
   }
   function rotate(groups, key) {
     return groups.filter(([, movies]) => movies.length >= 4)
@@ -137,6 +142,10 @@ export function programLibrary(films, { seed, recent, hasPoster, hasStill }) {
   };
   const match = rotate(ranked(watched, 'reference').slice(0, 24).map((film) => [film.title, related(film)]), 'related');
   add('Unwatched Picks', '', unwatched);
+  for (const key of homeFormats) {
+    const [, label, matches, mark, suffix] = mediaFormats.find(([id]) => id === key);
+    add(key === 'hdr' ? 'HDR' : label, '', films.filter((film) => matches(film.file)), false, mark, suffix);
+  }
   if (match) add(`Because you watched ${match[0]}`, '', match[1]);
   if (genre) add(genre[0], 'Genre spotlight', genre[1]);
   add('Top Rated', 'Highest IMDb ratings in your library', [...films].filter((film) => film.rating)

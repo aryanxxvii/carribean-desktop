@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Check, ChevronDown, Download, ExternalLink, Film, FolderOpen, GitBranch, PencilLine, Play, RefreshCw, Save, Star, Upload } from 'lucide-react';
+import { Check, ChevronDown, Circle, Download, ExternalLink, Film, FolderOpen, GitBranch, PencilLine, Play, RefreshCw, Save, Star, Upload } from 'lucide-react';
 import { call } from './api';
 import { GlassSegment, Modal, movieFacts, moviePoster } from './components';
 import { FilmFile } from './file-details';
@@ -36,8 +36,8 @@ export function FilmDetails({ film, onClose, onPlay, onWatched, onEdit }) {
       </dl>}
       <div className="detail-tools">
         {film.onDisk && <button className="button glass primary" onClick={() => onPlay(film)}><Play size={16} fill="currentColor" />Play film</button>}
-        <button type="button" className={'button glass secondary' + (film.watched ? ' chosen' : '')}
-          aria-pressed={film.watched} onClick={() => onWatched(film)}><Check size={15} />{film.watched ? 'Watched' : 'Mark watched'}</button>
+        <button type="button" className={'button glass secondary watch-toggle'}
+          aria-pressed={film.watched} onClick={() => onWatched(film)}>{film.watched ? <Check size={15} /> : <Circle size={15} />}{film.watched ? 'Watched' : 'Mark watched'}</button>
         <button type="button" className="button glass secondary" onClick={() => onEdit(film)}><PencilLine size={14} />Edit metadata</button>
         {film.imdb && <a className="button glass secondary" href={'https://www.imdb.com/title/' + film.imdb + '/'} target="_blank" rel="noreferrer">IMDb <ExternalLink size={13} /></a>}
       </div>

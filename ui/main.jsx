@@ -146,7 +146,7 @@ function App() {
   }
   const gridProps = { onDetails: details, onPlay: play, onWatched: toggleWatched };
   const activeFilm = modal?.film && data.films.find((film) => film.id === modal.film.id);
-  const libraryFilters = <LibraryFilters filters={filters} genres={genres} change={changeFilters}
+  const libraryFilters = <LibraryFilters filters={filters} genres={genres} films={onDrive} change={changeFilters}
     reset={() => changeFilters(defaultFilters)} onSurprise={surprise} canSurprise={results.length > 0} />;
   const grouped = useMemo(() => groupLibrary(results, filters), [results, filters]);
   const groupedCount = grouped.reduce((sum, [, films]) => sum + films.length, 0);
@@ -191,7 +191,7 @@ function App() {
         {loaded && !onDrive.length && <Empty icon={HardDrive}
           title={data.device.connected ? 'No movies found in this folder' : data.device.moviePath ? 'Movie drive disconnected' : 'Connect your movie folder'}
           action={<button className="button glass primary" onClick={settings}><HardDrive size={16} />Library settings</button>} />}
-        {showingShelves && shelves.map(({ name, reason, movies }) => <Shelf key={name} title={name} reason={reason} movies={movies} {...gridProps} />)}
+        {showingShelves && shelves.map(({ name, reason, movies, mark, suffix }) => <Shelf key={name} title={name} reason={reason} movies={movies} mark={mark} suffix={suffix} {...gridProps} />)}
         {!showingShelves && !!onDrive.length && (results.length ? visibleGroups.map(([name, movies, groupSize]) => <section
           className="film-group" key={name} aria-label={name}>
           {filters.group && <div className="shelf-heading"><h2>{name}</h2><span>{groupSize}</span></div>}
