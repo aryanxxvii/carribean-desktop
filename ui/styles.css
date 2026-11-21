@@ -595,6 +595,7 @@ kbd { color: #bcbcbc; background: #0b0b0b69; border: 1px solid #ffffff1c; border
 .format-mark img { width: auto; height: 14px; max-width: 91px; object-fit: contain; filter: brightness(0) invert(.95); }
 .format-choices { display: flex; flex-wrap: wrap; gap: 4px; }
 .format-choices .filter-chip { display: inline-flex; align-items: center; padding-inline: 7px; }
+.shelf-title { display: flex; align-items: center; flex-wrap: wrap; gap: .25em .5em; }
 .shelf-title .format-mark img { scale: 1; height: 23px; max-width: 155px; }
 .shelf-title .format-mark img[alt='Dolby Atmos'] { height: 17px; }
 .shelf-title .format-mark img[alt^='IMAX'] { height: 14px; }

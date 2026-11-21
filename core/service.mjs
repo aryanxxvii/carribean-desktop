@@ -7,7 +7,7 @@ import { cleanFilm, createOmdb, withMetadata } from './metadata.mjs';
 import { parseSnapshot, signIn, syncGit, validateGit } from './git.mjs';
 import { importLegacy } from './legacy.mjs';
 import { searchWikidata } from './film-search.mjs';
-import { createMediaReader } from './media-info.mjs';
+import { createMediaReader, editionBadge } from './media-info.mjs';
 import { cachedBackdrop, refreshBackdrops } from './backdrops.mjs';
 
 const validImdb = (value) => /^tt\d{5,16}$/.test(value || '');
@@ -81,7 +81,7 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
           backdrop: cachedBackdrop({ ...record.value, id }, backdrops) || undefined,
           file: settings.files[id]?.includes(media[id]?.source) ? {
             size: media[id].size, resolution: media[id].resolution, formats: media[id].formats,
-            aspect: media[id].aspect, edition: media[id].edition,
+            aspect: media[id].aspect, ...editionBadge(media[id]),
             audioFormats: [...new Set((media[id].audio || []).map((track) => track.format).filter(Boolean))]
           } : undefined
         })),
@@ -271,7 +271,7 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
           const movie = await localMovie(id);
           if (!movie) return null;
           const { source, version, ...details } = await mediaReader.details(id, movie);
-          return details;
+          return { ...details, ...editionBadge(details) };
         }
         case 'search': {
           const query = String(payload.query || '').trim().slice(0, 200);

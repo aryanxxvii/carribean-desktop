@@ -35,7 +35,7 @@ function mediaBadges(file) {
   if (!audioMarks.length && audio[0]) audioMarks.push(audio[0]);
   return [
     file.resolution && { label: file.resolution, title: 'Resolution' },
-    file.edition && { label: file.edition, mark: 'IMAX', suffix: file.edition === 'IMAX Enhanced' ? 'Enhanced' : '', title: 'Edition tag' },
+    file.edition && { label: file.edition, mark: 'IMAX', suffix: file.edition === 'IMAX Enhanced' ? 'Enhanced' : '', title: file.editionSource === 'ratio' ? 'Matched encoded aspect ratio' : 'Edition tag' },
     ...(file.formats || []).filter((format) => format !== 'SDR').map((format) => ({
       label: format, mark: marks[format] ? format : undefined
     })),
@@ -64,7 +64,7 @@ export function FilmFile({ id, cached }) {
     ['Size', fileSize(info?.size)],
     ['Resolution', file?.width ? `${file.resolution} · ${file.width} × ${file.height}` : info?.resolution],
     ['Aspect ratio', info?.aspect],
-    ['Edition', info?.edition && info.edition + ' (tagged)'],
+    ['Edition', info?.edition && info.edition + (info.editionSource === 'ratio' ? ' (ratio match)' : ' (tagged)')],
     ['Video', [file?.videoCodec, ...(info?.formats || [])].filter(Boolean).join(' · ')],
     ['Container', file?.container]
   ].filter(([, value]) => value);

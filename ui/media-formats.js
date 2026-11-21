@@ -23,7 +23,6 @@ export const formatGroups = {
 };
 
 export const mediaFormats = Object.values(formatGroups).flat();
-export const homeFormats = ['imax', 'imaxEnhanced', '4K', 'vision', 'atmos', 'hdr', 'HDR10+', 'dtsHD', 'dtsX', 'dts', '1080p'];
 
 export const formatMarks = {
   'Dolby Atmos': 'dolby-atmos.svg',

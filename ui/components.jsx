@@ -224,15 +224,16 @@ export function Shelf({ title, reason, movies, mark, suffix, ...props }) {
     const trackWidth = track.current.clientWidth;
     track.current.scrollBy({ left: direction * Math.max(160, trackWidth * .83), behavior: 'smooth' });
   }
-  return <section className="film-shelf" aria-label={title}>
+  const shelfName = [title, mark].filter(Boolean).join(' ');
+  return <section className="film-shelf" aria-label={shelfName}>
     <div className="shelf-heading">
-      <div><h2 className="shelf-title"><FormatMark label={title} mark={mark} suffix={suffix} /></h2>{reason && <p className="shelf-reason">{reason}</p>}</div>
+      <div><h2 className="shelf-title">{title}{mark && <FormatMark label={mark} mark={mark} suffix={suffix} />}</h2>{reason && <p className="shelf-reason">{reason}</p>}</div>
       <div className="shelf-arrows">
-        <IconButton icon={ChevronLeft} label={'Previous in ' + title} disabled={ends[0]} onClick={() => scroll(-1)} />
-        <IconButton icon={ChevronRight} label={'Next in ' + title} disabled={ends[1]} onClick={() => scroll(1)} />
+        <IconButton icon={ChevronLeft} label={'Previous in ' + shelfName} disabled={ends[0]} onClick={() => scroll(-1)} />
+        <IconButton icon={ChevronRight} label={'Next in ' + shelfName} disabled={ends[1]} onClick={() => scroll(1)} />
       </div>
     </div>
-    <div ref={track} className="shelf-track" tabIndex={0} aria-label={title + ' posters'}
+    <div ref={track} className="shelf-track" tabIndex={0} aria-label={shelfName + ' posters'}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
         event.preventDefault();

@@ -3,6 +3,11 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
+export function editionBadge(file) {
+  if (file.edition) return { edition: file.edition, editionSource: 'tag' };
+  if (['1.90:1', '1.43:1'].includes(file.aspect)) return { edition: 'IMAX', editionSource: 'ratio' };
+  return { edition: '' };
+}
 const rationals = (value) => {
   const [a, b] = String(value || '').split(':').map(Number);
   return a > 0 && b > 0 ? a / b : 0;

@@ -1,4 +1,4 @@
-import { homeFormats, mediaFormats } from './media-formats.js';
+import { mediaFormats } from './media-formats.js';
 
 export const genreNames = (film) => (film.genre || '').split(',').map((genre) => genre.trim()).filter(Boolean);
 export const defaultFilters = { genre: '', edition: '', resolution: '', dynamicRange: '', audio: '', min: 0, max: 600, status: 'all', sort: '', descending: false, group: '', groupOrder: 'name' };
@@ -142,14 +142,13 @@ export function programLibrary(films, { seed, recent, hasPoster, hasStill }) {
   };
   const match = rotate(ranked(watched, 'reference').slice(0, 24).map((film) => [film.title, related(film)]), 'related');
   add('Unwatched Picks', '', unwatched);
-  for (const key of homeFormats) {
-    const [, label, matches, mark, suffix] = mediaFormats.find(([id]) => id === key);
-    add(key === 'hdr' ? 'HDR' : label, '', films.filter((film) => matches(film.file)), false, mark, suffix);
-  }
   if (match) add(`Because you watched ${match[0]}`, '', match[1]);
   if (genre) add(genre[0], 'Genre spotlight', genre[1]);
   add('Top Rated', 'Highest IMDb ratings in your library', [...films].filter((film) => film.rating)
     .sort((a, b) => b.rating - a.rating || score(b, 'rating') - score(a, 'rating')), true);
+  const [, , hasAtmos] = mediaFormats.find(([id]) => id === 'atmos');
+  add('Hear the whole picture with', '', films.filter((film) => hasAtmos(film.file)), false, 'Dolby Atmos');
+  add('Made for a wider screen', 'Encoded at 2.20:1 or wider', films.filter((film) => parseFloat(film.file?.aspect) >= 2.2));
   if (seed % 2 && director) add(`Directed by ${director[0]}`, 'In your library', director[1]);
   else if (decade) add(decade[0], 'Decade spotlight', decade[1]);
   add('Under 100 Minutes', 'A shorter watch', films.filter((film) => film.runtime > 0 && film.runtime < 100));
