@@ -1,6 +1,6 @@
 import { clamp } from './optics';
 
-export function incidentLight(box, scenes, sample) {
+export function incidentLight(box, scenes, sample, wideReflection = false) {
   const centerX = (box.left + box.right) / 2;
   const centerY = (box.top + box.bottom) / 2;
   const rgb = [0, 0, 0];
@@ -17,7 +17,13 @@ export function incidentLight(box, scenes, sample) {
     const distance = Math.hypot(dx, dy);
     const reach = clamp((226 - distance) / 100);
     if (!reach || scene.opacity < .005) continue;
-    const color = sample(scene, x, y);
+    let color = sample(scene, x, y);
+    if (wideReflection && scene.still && dy > 0) {
+      for (const offset of [-.38, .38]) {
+        const candidate = sample(scene, clamp(x + box.width * offset, clip.left + insetX, clip.right - insetX), y);
+        if (candidate && (!color || candidate.emission > color.emission)) color = candidate;
+      }
+    }
     if (!color) continue;
     const falloff = reach ** 2 / (1 + (distance / 87) ** 2);
     const light = color.emission * falloff * scene.opacity;

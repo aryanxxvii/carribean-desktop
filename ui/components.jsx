@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown, ChevronLeft, ChevronRight, Circle, CircleAlert,
-  Film, Layers3, Play, Search, Shuffle, Star, X
+  Film, Layers3, Play, RefreshCw, Search, Shuffle, Star, X
 } from 'lucide-react';
 import { asset } from './api';
 import { activeFilters, genreNames } from './library';
@@ -79,7 +79,7 @@ function prepareArtwork(film) {
   return task;
 }
 
-export function Spotlight({ film: selected, movies, onMove, onSet, onDetails, onPlay }) {
+export function Spotlight({ film: selected, movies, onMove, onSet, onDetails, onPlay, onRefresh }) {
   const [slide, setSlide] = useState(null);
   const film = slide && (movies.find((movie) => movie.id === slide.film.id) || slide.film);
   useEffect(() => {
@@ -93,7 +93,7 @@ export function Spotlight({ film: selected, movies, onMove, onSet, onDetails, on
     if (index < 0 || movies.length < 2) return;
     for (const step of [1, -1]) void prepareArtwork(movies[(index + step + movies.length) % movies.length]);
   }, [film?.id, movies]);
-  if (!slide) return <section className="spotlight spotlight-loading" aria-label="Featured films" aria-busy="true" />;
+  if (!slide) return <section className="spotlight spotlight-loading" data-art-source aria-label="Featured films" aria-busy="true" />;
   if (!film) return null;
   const position = movies.findIndex((movie) => movie.id === film.id);
   const pending = film.id !== selected?.id;
@@ -105,6 +105,7 @@ export function Spotlight({ film: selected, movies, onMove, onSet, onDetails, on
       </div>
     </div>
     <div className="spotlight-shade" />
+    {movies.length > 1 && <IconButton icon={RefreshCw} label="Refresh picks" className="spotlight-refresh" onClick={onRefresh} />}
     <div className="spotlight-copy">
       <div className="spotlight-caption" key={film.id}>
         <span className="feature-label">Featured {position >= 0 && <span className="feature-position">· {position + 1} of {movies.length}</span>}</span>

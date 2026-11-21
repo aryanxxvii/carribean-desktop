@@ -175,7 +175,8 @@ export function mountGlass() {
       const frame = inherited?.viewport;
       const overArtwork = frame && centerX >= frame.left && centerX <= frame.right && centerY >= frame.top && centerY <= frame.bottom;
       const directLight = inherited && sampleArtwork(inherited, centerX, centerY);
-      const reflectedLight = ambient && !directLight && incidentLight(box, detailArt ? [detailArt] : workspaceScenes, sampleArtwork);
+      const reflectedLight = ambient && !directLight && incidentLight(box, detailArt ? [detailArt] : workspaceScenes, sampleArtwork,
+        surface.matches('.page-heading .top-search'));
       paints.push({
         surface,
         rgb: directLight?.rgb || reflectedLight?.rgb || neutral,

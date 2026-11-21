@@ -177,11 +177,10 @@ function App() {
         {showingShelves && !!featured.length && <Spotlight
           film={featured[slide % featured.length]} movies={featured}
           onDetails={details} onPlay={play} onSet={setSlide}
+          onRefresh={() => { setProgram(newProgram()); setSlide(0); }}
           onMove={(step) => setSlide((value) => (value + step + featured.length) % featured.length)} />}
         {!!onDrive.length && <div className="library-tools">
-          {showingShelves && featured.length > 1 ? <button type="button" className="button glass secondary refresh-picks"
-            onClick={() => { setProgram(newProgram()); setSlide(0); }}><RefreshCw size={14} />Refresh picks</button>
-            : <span role="status">{prettyNumber(results.length)} {searchTerm ? (results.length === 1 ? 'match' : 'matches') : (results.length === 1 ? 'film' : 'films')}</span>}
+          {!showingShelves && <span role="status">{prettyNumber(results.length)} {searchTerm ? (results.length === 1 ? 'match' : 'matches') : (results.length === 1 ? 'film' : 'films')}</span>}
           <button type="button" className={'button glass secondary mobile-filter' + (filtersActive ? ' chosen' : '')}
             aria-haspopup="dialog" onClick={() => showModal({ kind: 'filters' })}><SlidersHorizontal size={16} />Filters</button>
           <GlassSegment label="Library layout" choices={layouts} value={layout}
