@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { call, native } from './api';
 import {
-  Empty, GlassSegment, IconButton, LibraryFilters, Modal, MovieGrid, NoticeContext, ScrollContinuation, Shelf, Spotlight, TopSearch, hasStill, moviePoster, prettyNumber
+  Empty, GlassSegment, IconButton, LibraryFilters, Modal, MovieGrid, NoticeContext, ScrollContinuation, Shelf, Spotlight, TopSearch, prettyNumber
 } from './components';
 import { FilmDetails, MetadataEditor, Settings } from './dialogs';
 import { activeFilters, defaultFilters, filterLibrary, findFilms, genresIn, groupLibrary, programLibrary } from './library';
@@ -16,11 +16,7 @@ const defaultDevice = { moviePath: '', git: { remote: '', branch: 'carribean-lib
 const pageSize = 36;
 const layouts = [['shelves', 'Shelves', PanelsTopLeft], ['grid', 'Poster grid', Grid2X2], ['list', 'Compact list', LayoutList]];
 
-const featuredHistoryKey = 'caribbean-featured-history';
-function newProgram() {
-  const recent = (localStorage.getItem(featuredHistoryKey) || localStorage.getItem('caribbean-last-featured') || '').split(',').filter(Boolean);
-  return { seed: Math.floor(Math.random() * 0x100000000), recent };
-}
+const newProgram = () => ({ seed: Math.floor(Math.random() * 0x100000000) });
 
 function App() {
   const [data, setData] = useState({ films: [], device: defaultDevice });
@@ -92,10 +88,7 @@ function App() {
   const filtered = useMemo(() => filterLibrary(onDrive, filters), [onDrive, filters]);
   const results = useMemo(() => searchTerm ? findFilms(filtered, searchTerm) : filtered, [filtered, searchTerm]);
   const genres = useMemo(() => genresIn(onDrive), [onDrive]);
-  const { featured, shelves } = useMemo(() => programLibrary(onDrive, { ...program, hasPoster: moviePoster, hasStill }), [onDrive, program]);
-  useEffect(() => {
-    if (featured[0]) localStorage.setItem(featuredHistoryKey, [...new Set([featured[0].id, ...program.recent])].slice(0, 6).join(','));
-  }, [featured, program]);
+  const { featured, shelves } = useMemo(() => programLibrary(onDrive, program), [onDrive, program]);
   function search(next) {
     setQuery(next);
     setLimit(pageSize);

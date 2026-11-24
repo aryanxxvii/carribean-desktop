@@ -78,7 +78,7 @@ function variation(key, seed) {
   return ((hash ^ (hash >>> 13)) >>> 0) / 4294967296;
 }
 
-export function programLibrary(films, { seed, recent, hasPoster, hasStill }) {
+export function programLibrary(films, { seed }) {
   const watched = films.filter((film) => film.watched);
   const unwatched = films.filter((film) => !film.watched);
   const genres = new Map(films.map((film) => [film.id, genreNames(film)]));
@@ -92,23 +92,15 @@ export function programLibrary(films, { seed, recent, hasPoster, hasStill }) {
     return (film.rating || 6) * .42 + affinity * 1.7 + variation(key + film.id, seed) * 2.8;
   };
   const ranked = (items, key) => [...items].sort((a, b) => score(b, key) - score(a, key) || titles(a, b));
-  const candidates = films;
+  const pool = [...films].sort((a, b) => a.id.localeCompare(b.id));
+  let state = seed;
   const featured = [];
-  const knownGenres = new Set();
-  const knownEras = new Set();
-  const unseen = candidates.filter((film) => !recent.includes(film.id));
-  const alternatives = unseen.length ? unseen : candidates.filter((film) => film.id !== recent[0]);
-  const ready = alternatives.filter(hasStill);
-  const leadPool = ready.length ? ready : alternatives;
-  while (featured.length < Math.min(5, candidates.length)) {
-    const available = (featured.length || !leadPool.length ? candidates : leadPool).filter((film) => !featured.includes(film));
-    const featureScore = (film) => score(film, 'spotlight') + Number(!film.watched) * .8 + Number(hasStill(film) || !!hasPoster(film)) * .45
-      + Number(!knownGenres.has(genres.get(film.id)[0])) * .9 + Number(!knownEras.has(decadeOf(film))) * .65
-      - Number(recent.includes(film.id)) * 1.2;
-    const next = available.sort((a, b) => featureScore(b) - featureScore(a) || titles(a, b))[0];
-    featured.push(next);
-    knownGenres.add(genres.get(next.id)[0]);
-    knownEras.add(decadeOf(next));
+  while (pool.length && featured.length < 5) {
+    state = (state + 0x6d2b79f5) | 0;
+    let bits = Math.imul(state ^ (state >>> 15), state | 1);
+    bits ^= bits + Math.imul(bits ^ (bits >>> 7), bits | 61);
+    const draw = ((bits ^ (bits >>> 14)) >>> 0) / 4294967296;
+    featured.push(pool.splice(Math.floor(draw * pool.length), 1)[0]);
   }
 
   const shelves = [];

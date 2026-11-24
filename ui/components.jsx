@@ -12,7 +12,6 @@ import discovery from './discovery.json';
 import backdrops from '../core/bundled-backdrops.json';
 
 const filmBackdrop = (film) => asset(backdrops[film.imdb]) || film.backdrop;
-export const hasStill = (film) => !!filmBackdrop(film);
 const discoveryPosters = new Map(discovery.map((film) => [film.imdb, film.poster]));
 export const moviePoster = (film) => {
   const cached = posterCache[film.imdb];
