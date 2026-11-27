@@ -1,7 +1,7 @@
 import { readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { createStorage, mergeLibrary, put } from './storage.mjs';
+import { createStorage, driveLibrary, mergeLibrary, put } from './storage.mjs';
 import { scanDirectory } from './scanner.mjs';
 import { cleanFilm, createOmdb, withMetadata } from './metadata.mjs';
 import { parseSnapshot, signIn, syncGit, validateGit } from './git.mjs';
@@ -75,9 +75,10 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
     },
     async snapshot() {
       const [library, settings, media, backdrops] = await Promise.all([store.library(), store.settings(), store.media(), store.backdrops()]);
+      const collection = driveLibrary(library, settings.files);
       return {
-        films: Object.entries(library.films).map(([id, record]) => ({
-          ...record.value, id, watched: library.watched[id]?.value === true, onDisk: !!settings.files[id]?.length,
+        films: Object.entries(collection.films).map(([id, record]) => ({
+          ...record.value, id, watched: collection.watched[id]?.value === true, onDisk: true,
           backdrop: cachedBackdrop({ ...record.value, id }, backdrops) || undefined,
           file: settings.files[id]?.includes(media[id]?.source) ? {
             size: media[id].size, resolution: media[id].resolution, formats: media[id].formats,
@@ -136,7 +137,7 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
             }
           });
         }
-        if (enrich || filesChanged) void service.refreshMedia().catch(() => {});
+        if (!enrich && filesChanged) void service.refreshMedia().catch(() => {});
         if (!enrich) return;
         scanSummary = { files: Object.keys(files).length, found: Object.keys(files).filter((id) => !settings.files[id]?.length).length,
           missing: Object.keys(settings.files).filter((id) => !files[id]).length, updated: 0 };
@@ -186,15 +187,40 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
         let scanError;
         try { await service.scan({ enrich: true }); }
         catch (error) { scanError = error; }
-        const { git } = await store.settings();
-        if (git.remote && (!startup || git.startup)) {
-          activity = 'Syncing with Git';
-          try {
-            const lastSync = await syncGit(store, git);
-            await store.configure((settings) => {
-              if (settings.git.remote === git.remote && settings.git.branch === git.branch) settings.lastSync = lastSync;
-            });
-          } catch (error) { scanError ||= error; }
+        const settings = await store.settings();
+        const { git } = settings;
+        if (!startup && (!scanSummary || !settings.connected || settings.skipped)) {
+          throw scanError || new Error('Caribbean could not scan the entire movie folder. Check the drive and try again.');
+        }
+        if (scanSummary && settings.connected && !settings.skipped) {
+          activity = 'Reading movie file details';
+          const root = await realpath(settings.moviePath);
+          const files = {};
+          const media = {};
+          const ids = Object.keys(settings.files);
+          let next = 0;
+          await Promise.all(Array.from({ length: Math.min(3, ids.length) }, async () => {
+            while (next < ids.length) {
+              const id = ids[next++];
+              const movie = await localMovie(id, settings, root);
+              if (!movie) continue;
+              const { source, version, unavailable, ...details } = await mediaReader.details(id, movie);
+              files[id] = settings.files[id];
+              media[id] = { ...details, ...editionBadge(details) };
+            }
+          }));
+          const reconcile = (state) => driveLibrary(state, files, media);
+          if ((await store.settings()).moviePath !== settings.moviePath) throw new Error('The movie folder changed during sync. Sync again.');
+          await store.edit(reconcile);
+          if (git.remote && (!startup || git.startup)) {
+            activity = 'Syncing with Git';
+            try {
+              const lastSync = await syncGit(store, git, reconcile);
+              await store.configure((settings) => {
+                if (settings.git.remote === git.remote && settings.git.branch === git.branch) settings.lastSync = lastSync;
+              });
+            } catch (error) { scanError ||= error; }
+          }
         }
         if (scanSummary) {
           const [library, settings] = await Promise.all([store.library(), store.settings()]);
@@ -309,7 +335,11 @@ export function createService({ directory, open = openMovieFile, pickFolder } = 
           await service.scan();
           break;
         }
-        case 'export': return store.library();
+        case 'export': {
+          const [library, settings] = await Promise.all([store.library(), store.settings()]);
+          const media = Object.fromEntries(Object.entries(library.films).map(([id, record]) => [id, record.file]));
+          return driveLibrary(library, settings.files, media);
+        }
         case 'import':
           await store.edit((state) => mergeLibrary(state, parseSnapshot(JSON.stringify(payload.library))));
           break;

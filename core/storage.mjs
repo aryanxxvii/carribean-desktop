@@ -50,6 +50,35 @@ export function put(group, id, value) {
   group[id] = { rev: String(timestamp).padStart(13, '0') + '-' + randomUUID(), value };
 }
 
+export function driveLibrary(library, files, media = {}) {
+  const result = emptyLibrary();
+  result.lists = library.lists;
+  const active = new Map();
+  const identity = (id, record) => record.value.imdb || id;
+  for (const [id, record] of Object.entries(library.films).sort(([a], [b]) => a.localeCompare(b))) {
+    if (files[id]?.length && !active.has(identity(id, record))) active.set(identity(id, record), id);
+  }
+  for (const [id, record] of Object.entries(library.films)) {
+    const target = active.get(identity(id, record));
+    if (!target) continue;
+    const previous = result.films[target];
+    if (!previous || previous.rev < record.rev || (previous.rev === record.rev && id === target)) {
+      result.films[target] = { rev: record.rev, value: record.value, ...(media[target] ? { file: media[target] } : {}) };
+    }
+    const watched = library.watched[id];
+    if (watched && (!result.watched[target] || result.watched[target].rev < watched.rev)) result.watched[target] = watched;
+  }
+  for (const [key, entry] of Object.entries(library.entries)) {
+    const [list, id] = key.split(':');
+    const film = library.films[id];
+    const target = film && active.get(identity(id, film));
+    if (!target) continue;
+    const entryKey = list + ':' + target;
+    if (!result.entries[entryKey] || result.entries[entryKey].rev < entry.rev) result.entries[entryKey] = entry;
+  }
+  return mergeLibrary(result, emptyLibrary());
+}
+
 export function createStorage(root = dataDirectory) {
   const libraryFile = path.join(root, 'library.json');
   const settingsFile = path.join(root, 'device.json');

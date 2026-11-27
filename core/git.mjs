@@ -110,7 +110,7 @@ export async function signIn(root, config) {
     'Git Credential Manager could not save the sign-in.');
 }
 
-export async function syncGit(store, config) {
+export async function syncGit(store, config, reconcile) {
   if (!config.remote) return null;
   const directory = path.join(store.root, 'git-backup');
   await mkdir(directory, { recursive: true });
@@ -129,21 +129,20 @@ export async function syncGit(store, config) {
       const refs = await checked(['ls-remote', '--refs', '--', config.remote, ref]);
       let parent = '';
       let remote = emptyLibrary();
+      let remoteJson = remote;
       if (refs) {
         await checked(['fetch', '--no-tags', '--depth=1', '--', config.remote, ref]);
         parent = await checked(['rev-parse', 'FETCH_HEAD']);
         const found = await checked(['ls-tree', parent, '--', snapshotPath]);
         if (found) {
           if (!/^100644 blob [a-f\d]+\t/.test(found)) throw new Error('The remote snapshot is not a regular Git file.');
-          remote = parseSnapshot(await checked(['show', parent + ':' + snapshotPath]));
+          const snapshot = await checked(['show', parent + ':' + snapshotPath]);
+          remoteJson = JSON.parse(snapshot);
+          remote = parseSnapshot(snapshot);
         }
       }
-      const local = await store.library();
-      let merged = mergeLibrary(local, remote);
-      if (JSON.stringify(local) !== JSON.stringify(merged)) {
-        merged = await store.edit((state) => mergeLibrary(state, remote));
-      }
-      if (JSON.stringify(merged) !== JSON.stringify(mergeLibrary(remote, emptyLibrary()))) {
+      const merged = await store.edit((state) => reconcile(mergeLibrary(state, remote)));
+      if (JSON.stringify(merged) !== JSON.stringify(remoteJson)) {
         const blob = await checked(['hash-object', '-w', '--stdin'], JSON.stringify(merged, null, 2) + '\n');
         await checked(parent ? ['read-tree', parent] : ['read-tree', '--empty']);
         await checked(['update-index', '--add', '--cacheinfo', '100644,' + blob + ',' + snapshotPath]);

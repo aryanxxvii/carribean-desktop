@@ -75,8 +75,11 @@ test('restores a library on a new device, merges edits, and keeps paths local', 
 
   const snapshot = gitCommand(['--git-dir', remote, 'show', git.branch + ':carribean-library.json']);
   assert.doesNotMatch(snapshot, /First Drive|Second Drive|fullPath|moviePath|omdb|gitconfig/i);
+  assert.equal(JSON.parse(snapshot).films[id].file.size, 4);
   await rename(folderB, folderB + '-disconnected');
-  const offline = await second.action('sync');
+  await assert.rejects(second.action('sync'), /could not scan the entire movie folder/);
+  const offline = await second.action('snapshot');
   assert.equal(offline.device.connected, false);
-  assert.equal(offline.films[0].onDisk, false);
+  assert.deepEqual(offline.films, []);
+  assert.equal(gitCommand(['--git-dir', remote, 'show', git.branch + ':carribean-library.json']), snapshot);
 });
